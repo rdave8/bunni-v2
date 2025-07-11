@@ -22,8 +22,6 @@ import {LibCarpetedDoubleGeometricDistribution} from "../LibCarpetedDoubleGeomet
 enum DistributionType {
     NULL, // exists so that if ldfParams is bytes32(0) we know it's not overridden
     UNIFORM,
-    GEOMETRIC,
-    DOUBLE_GEOMETRIC,
     CARPETED_GEOMETRIC,
     CARPETED_DOUBLE_GEOMETRIC
 }
@@ -105,57 +103,6 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
 
             // update ldf state
             newLdfState = _encodeState(tickLower, ldfParams);
-        } else if (distro == DistributionType.GEOMETRIC) {
-            (int24 minTick, int24 length, uint256 alphaX96, ShiftMode shiftMode) =
-                LibGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
-
-            if (initialized) {
-                minTick = enforceShiftMode(minTick, lastMinTick, shiftMode);
-                shouldSurge = shouldSurge || minTick != lastMinTick;
-            }
-
-            (liquidityDensityX96_, cumulativeAmount0DensityX96, cumulativeAmount1DensityX96) = LibGeometricDistribution
-                .query({
-                roundedTick: roundedTick,
-                tickSpacing: key.tickSpacing,
-                minTick: minTick,
-                length: length,
-                alphaX96: alphaX96
-            });
-
-            // update ldf state
-            newLdfState = _encodeState(minTick, ldfParams);
-        } else if (distro == DistributionType.DOUBLE_GEOMETRIC) {
-            (
-                int24 minTick,
-                int24 length0,
-                int24 length1,
-                uint256 alpha0X96,
-                uint256 alpha1X96,
-                uint256 weight0,
-                uint256 weight1,
-                ShiftMode shiftMode
-            ) = LibDoubleGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
-            if (initialized) {
-                minTick = enforceShiftMode(minTick, lastMinTick, shiftMode);
-                shouldSurge = shouldSurge || minTick != lastMinTick;
-            }
-
-            (liquidityDensityX96_, cumulativeAmount0DensityX96, cumulativeAmount1DensityX96) =
-            LibDoubleGeometricDistribution.query({
-                roundedTick: roundedTick,
-                tickSpacing: key.tickSpacing,
-                minTick: minTick,
-                length0: length0,
-                length1: length1,
-                alpha0X96: alpha0X96,
-                alpha1X96: alpha1X96,
-                weight0: weight0,
-                weight1: weight1
-            });
-
-            // update ldf state
-            newLdfState = _encodeState(minTick, ldfParams);
         } else if (distro == DistributionType.CARPETED_GEOMETRIC) {
             (int24 minTick, int24 length, uint256 alphaX96, uint256 weightCarpet, ShiftMode shiftMode) =
                 LibCarpetedGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
@@ -247,54 +194,6 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
                 tickLower: tickLower,
                 tickUpper: tickUpper
             });
-        } else if (distro == DistributionType.GEOMETRIC) {
-            (int24 minTick, int24 length, uint256 alphaX96, ShiftMode shiftMode) =
-                LibGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
-
-            if (initialized) {
-                minTick = enforceShiftMode(minTick, lastMinTick, shiftMode);
-            }
-
-            return LibGeometricDistribution.computeSwap({
-                inverseCumulativeAmountInput: inverseCumulativeAmountInput,
-                totalLiquidity: totalLiquidity,
-                zeroForOne: zeroForOne,
-                exactIn: exactIn,
-                tickSpacing: key.tickSpacing,
-                minTick: minTick,
-                length: length,
-                alphaX96: alphaX96
-            });
-        } else if (distro == DistributionType.DOUBLE_GEOMETRIC) {
-            (
-                int24 minTick,
-                int24 length0,
-                int24 length1,
-                uint256 alpha0X96,
-                uint256 alpha1X96,
-                uint256 weight0,
-                uint256 weight1,
-                ShiftMode shiftMode
-            ) = LibDoubleGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
-
-            if (initialized) {
-                minTick = enforceShiftMode(minTick, lastMinTick, shiftMode);
-            }
-
-            return LibDoubleGeometricDistribution.computeSwap({
-                inverseCumulativeAmountInput: inverseCumulativeAmountInput,
-                totalLiquidity: totalLiquidity,
-                zeroForOne: zeroForOne,
-                exactIn: exactIn,
-                tickSpacing: key.tickSpacing,
-                minTick: minTick,
-                length0: length0,
-                length1: length1,
-                alpha0X96: alpha0X96,
-                alpha1X96: alpha1X96,
-                weight0: weight0,
-                weight1: weight1
-            });
         } else if (distro == DistributionType.CARPETED_GEOMETRIC) {
             (int24 minTick, int24 length, uint256 alphaX96, uint256 weightCarpet, ShiftMode shiftMode) =
                 LibCarpetedGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
@@ -363,45 +262,6 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
             return LibUniformDistribution.cumulativeAmount0(
                 roundedTick, totalLiquidity, key.tickSpacing, tickLower, tickUpper, false
             );
-        } else if (distro == DistributionType.GEOMETRIC) {
-            (int24 minTick, int24 length, uint256 alphaX96, ShiftMode shiftMode) =
-                LibGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
-
-            if (initialized) {
-                minTick = enforceShiftMode(minTick, lastMinTick, shiftMode);
-            }
-
-            return LibGeometricDistribution.cumulativeAmount0(
-                roundedTick, totalLiquidity, key.tickSpacing, minTick, length, alphaX96
-            );
-        } else if (distro == DistributionType.DOUBLE_GEOMETRIC) {
-            (
-                int24 minTick,
-                int24 length0,
-                int24 length1,
-                uint256 alpha0X96,
-                uint256 alpha1X96,
-                uint256 weight0,
-                uint256 weight1,
-                ShiftMode shiftMode
-            ) = LibDoubleGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
-
-            if (initialized) {
-                minTick = enforceShiftMode(minTick, lastMinTick, shiftMode);
-            }
-
-            return LibDoubleGeometricDistribution.cumulativeAmount0({
-                roundedTick: roundedTick,
-                totalLiquidity: totalLiquidity,
-                tickSpacing: key.tickSpacing,
-                minTick: minTick,
-                length0: length0,
-                length1: length1,
-                alpha0X96: alpha0X96,
-                alpha1X96: alpha1X96,
-                weight0: weight0,
-                weight1: weight1
-            });
         } else if (distro == DistributionType.CARPETED_GEOMETRIC) {
             (int24 minTick, int24 length, uint256 alphaX96, uint256 weightCarpet, ShiftMode shiftMode) =
                 LibCarpetedGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
@@ -466,45 +326,6 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
             return LibUniformDistribution.cumulativeAmount1(
                 roundedTick, totalLiquidity, key.tickSpacing, tickLower, tickUpper, false
             );
-        } else if (distro == DistributionType.GEOMETRIC) {
-            (int24 minTick, int24 length, uint256 alphaX96, ShiftMode shiftMode) =
-                LibGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
-
-            if (initialized) {
-                minTick = enforceShiftMode(minTick, lastMinTick, shiftMode);
-            }
-
-            return LibGeometricDistribution.cumulativeAmount1(
-                roundedTick, totalLiquidity, key.tickSpacing, minTick, length, alphaX96
-            );
-        } else if (distro == DistributionType.DOUBLE_GEOMETRIC) {
-            (
-                int24 minTick,
-                int24 length0,
-                int24 length1,
-                uint256 alpha0X96,
-                uint256 alpha1X96,
-                uint256 weight0,
-                uint256 weight1,
-                ShiftMode shiftMode
-            ) = LibDoubleGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
-
-            if (initialized) {
-                minTick = enforceShiftMode(minTick, lastMinTick, shiftMode);
-            }
-
-            return LibDoubleGeometricDistribution.cumulativeAmount1({
-                roundedTick: roundedTick,
-                totalLiquidity: totalLiquidity,
-                tickSpacing: key.tickSpacing,
-                minTick: minTick,
-                length0: length0,
-                length1: length1,
-                alpha0X96: alpha0X96,
-                alpha1X96: alpha1X96,
-                weight0: weight0,
-                weight1: weight1
-            });
         } else if (distro == DistributionType.CARPETED_GEOMETRIC) {
             (int24 minTick, int24 length, uint256 alphaX96, uint256 weightCarpet, ShiftMode shiftMode) =
                 LibCarpetedGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
@@ -570,20 +391,6 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
 
         if (distro == DistributionType.UNIFORM) {
             return LibUniformDistribution.isValidParams({
-                tickSpacing: key.tickSpacing,
-                twapSecondsAgo: twapSecondsAgo,
-                ldfParams: baseLdfParams,
-                ldfType: ldfType
-            });
-        } else if (distro == DistributionType.GEOMETRIC) {
-            return LibGeometricDistribution.isValidParams({
-                tickSpacing: key.tickSpacing,
-                twapSecondsAgo: twapSecondsAgo,
-                ldfParams: baseLdfParams,
-                ldfType: ldfType
-            });
-        } else if (distro == DistributionType.DOUBLE_GEOMETRIC) {
-            return LibDoubleGeometricDistribution.isValidParams({
                 tickSpacing: key.tickSpacing,
                 twapSecondsAgo: twapSecondsAgo,
                 ldfParams: baseLdfParams,
