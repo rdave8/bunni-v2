@@ -72,8 +72,9 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
         ldfParams = ldfParamsOverride_ == bytes32(0) ? ldfParams : ldfParamsOverride_;
 
         // decode ldf params and check surge
-        (DistributionType distro, bytes32 baseLdfParams) = _decodeLdfParams(ldfParams);
-        (bool initialized, int24 lastMinTick, bytes32 lastLdfParams) = _decodeState(ldfState);
+        (DistributionType distro, bytes28 baseLdfParams) = _decodeLdfParams(ldfParams);
+        (bool initialized, int24 lastMinTick, DistributionType lastDistributionType, bytes28 lastBaseLdfParams) =
+            _decodeState(ldfState);
         if (initialized) {
             // should surge if param was updated
             // if param was updated, the ldfState should be cleared since state for the previous config
@@ -81,7 +82,7 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
             // for example, if the previous LDF was uniform with range [0, 10] and STATIC shift mode and the new
             // config is uniform with range [-100, -90] and RIGHT shift mode, if the state wasn't cleared then
             // the LDF will still be [0, 10] when it should really be [-100, -90].
-            if (lastLdfParams != ldfParams) {
+            if (lastBaseLdfParams != baseLdfParams || lastDistributionType != distro) {
                 shouldSurge = true;
                 initialized = false; // this tells the later logic to ignore the state
             }
@@ -102,7 +103,7 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
                 .query({roundedTick: roundedTick, tickSpacing: key.tickSpacing, tickLower: tickLower, tickUpper: tickUpper});
 
             // update ldf state
-            newLdfState = _encodeState(tickLower, ldfParams);
+            newLdfState = _encodeState(tickLower, distro, baseLdfParams);
         } else if (distro == DistributionType.CARPETED_GEOMETRIC) {
             (int24 minTick, int24 length, uint256 alphaX96, uint256 weightCarpet, ShiftMode shiftMode) =
                 LibCarpetedGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
@@ -122,7 +123,7 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
             });
 
             // update ldf state
-            newLdfState = _encodeState(minTick, ldfParams);
+            newLdfState = _encodeState(minTick, distro, baseLdfParams);
         } else {
             LibCarpetedDoubleGeometricDistribution.Params memory params =
                 LibCarpetedDoubleGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
@@ -139,7 +140,7 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
             });
 
             // update ldf state
-            newLdfState = _encodeState(params.minTick, ldfParams);
+            newLdfState = _encodeState(params.minTick, distro, baseLdfParams);
         }
     }
 
@@ -173,8 +174,19 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
         ldfParams = ldfParamsOverride_ == bytes32(0) ? ldfParams : ldfParamsOverride_;
 
         // decode ldf params
-        (DistributionType distro, bytes32 baseLdfParams) = _decodeLdfParams(ldfParams);
-        (bool initialized, int24 lastMinTick, bytes32 lastLdfParams) = _decodeState(ldfState);
+        (DistributionType distro, bytes28 baseLdfParams) = _decodeLdfParams(ldfParams);
+        (bool initialized, int24 lastMinTick, DistributionType lastDistributionType, bytes28 lastBaseLdfParams) =
+            _decodeState(ldfState);
+        if (initialized) {
+            // if param was updated, the ldfState should be cleared since state for the previous config
+            // may affect the new config unnecessarily
+            // for example, if the previous LDF was uniform with range [0, 10] and STATIC shift mode and the new
+            // config is uniform with range [-100, -90] and RIGHT shift mode, if the state wasn't cleared then
+            // the LDF will still be [0, 10] when it should really be [-100, -90].
+            if (lastBaseLdfParams != baseLdfParams || lastDistributionType != distro) {
+                initialized = false; // this tells the later logic to ignore the state
+            }
+        }
 
         if (distro == DistributionType.UNIFORM) {
             (int24 tickLower, int24 tickUpper, ShiftMode shiftMode) =
@@ -247,8 +259,19 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
         ldfParams = ldfParamsOverride_ == bytes32(0) ? ldfParams : ldfParamsOverride_;
 
         // decode ldf params
-        (DistributionType distro, bytes32 baseLdfParams) = _decodeLdfParams(ldfParams);
-        (bool initialized, int24 lastMinTick, bytes32 lastLdfParams) = _decodeState(ldfState);
+        (DistributionType distro, bytes28 baseLdfParams) = _decodeLdfParams(ldfParams);
+        (bool initialized, int24 lastMinTick, DistributionType lastDistributionType, bytes28 lastBaseLdfParams) =
+            _decodeState(ldfState);
+        if (initialized) {
+            // if param was updated, the ldfState should be cleared since state for the previous config
+            // may affect the new config unnecessarily
+            // for example, if the previous LDF was uniform with range [0, 10] and STATIC shift mode and the new
+            // config is uniform with range [-100, -90] and RIGHT shift mode, if the state wasn't cleared then
+            // the LDF will still be [0, 10] when it should really be [-100, -90].
+            if (lastBaseLdfParams != baseLdfParams || lastDistributionType != distro) {
+                initialized = false; // this tells the later logic to ignore the state
+            }
+        }
 
         if (distro == DistributionType.UNIFORM) {
             (int24 tickLower, int24 tickUpper, ShiftMode shiftMode) =
@@ -311,8 +334,19 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
         ldfParams = ldfParamsOverride_ == bytes32(0) ? ldfParams : ldfParamsOverride_;
 
         // decode ldf params
-        (DistributionType distro, bytes32 baseLdfParams) = _decodeLdfParams(ldfParams);
-        (bool initialized, int24 lastMinTick, bytes32 lastLdfParams) = _decodeState(ldfState);
+        (DistributionType distro, bytes28 baseLdfParams) = _decodeLdfParams(ldfParams);
+        (bool initialized, int24 lastMinTick, DistributionType lastDistributionType, bytes28 lastBaseLdfParams) =
+            _decodeState(ldfState);
+        if (initialized) {
+            // if param was updated, the ldfState should be cleared since state for the previous config
+            // may affect the new config unnecessarily
+            // for example, if the previous LDF was uniform with range [0, 10] and STATIC shift mode and the new
+            // config is uniform with range [-100, -90] and RIGHT shift mode, if the state wasn't cleared then
+            // the LDF will still be [0, 10] when it should really be [-100, -90].
+            if (lastBaseLdfParams != baseLdfParams || lastDistributionType != distro) {
+                initialized = false; // this tells the later logic to ignore the state
+            }
+        }
 
         if (distro == DistributionType.UNIFORM) {
             (int24 tickLower, int24 tickUpper, ShiftMode shiftMode) =
@@ -377,8 +411,9 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
         ldfParams = ldfParamsOverride_ == bytes32(0) ? ldfParams : ldfParamsOverride_;
 
         // decode ldf params
-        // | distributionType - 1 byte | baseLdfParams - 31 bytes |
-        uint8 distributionTypeRaw = uint8(bytes1(ldfParams));
+        // distribution type is always the last byte of ldfParams
+        // | baseLdfParams - 31 bytes | distributionType - 1 byte |
+        uint8 distributionTypeRaw = uint8(bytes1(ldfParams << 248));
         if (distributionTypeRaw == 0 || distributionTypeRaw > uint8(type(DistributionType).max)) {
             // invalid distribution type
             // can't be NULL or beyond max
@@ -386,7 +421,7 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
         }
         DistributionType distro = DistributionType(distributionTypeRaw);
         bytes32 baseLdfParams = ldfParams & BASE_LDF_PARAMS_MASK;
-        uint8 shiftMode = uint8(bytes1(baseLdfParams)); // use uint8 since we don't know if the value is in range yet
+        uint8 shiftMode = uint8(bytes1(baseLdfParams)); // Use uint8 since we don't know if the value is in range yet. Due to the params format the first byte is always the shift mode.
         ldfType = shiftMode == uint8(ShiftMode.STATIC) ? LDFType.STATIC : LDFType.DYNAMIC_AND_STATEFUL; // need to fake ldfType to pass the base LDF checks since we always use DYNAMIC_AND_STATEFUL
 
         if (distro == DistributionType.UNIFORM) {
@@ -430,7 +465,8 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
 
         // ensure new params are valid
         // no need to check for ldfType since we always use DYNAMIC_AND_STATEFUL on init
-        bytes32 ldfParams = bytes32(abi.encodePacked(baseLdfParams, distributionType));
+        // distributionType is the last byte of ldfParams
+        bytes32 ldfParams = bytes32(abi.encodePacked(baseLdfParams, bytes3(0), distributionType));
         bool isValid = isValidParams({
             key: key,
             twapSecondsAgo: state.twapSecondsAgo,
@@ -449,27 +485,32 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
     function _decodeLdfParams(bytes32 ldfParams)
         internal
         pure
-        returns (DistributionType distributionType, bytes32 baseLdfParams)
+        returns (DistributionType distributionType, bytes28 baseLdfParams)
     {
         // | baseLdfParams - 31 bytes | distributionType - 1 byte |
         distributionType = DistributionType(uint8(bytes1(ldfParams << 248)));
-        baseLdfParams = ldfParams & BASE_LDF_PARAMS_MASK;
+        baseLdfParams = bytes28(ldfParams & BASE_LDF_PARAMS_MASK);
     }
 
     function _decodeState(bytes32 ldfState)
         internal
         pure
-        returns (bool initialized, int24 lastMinTick, bytes32 lastLdfParams)
+        returns (bool initialized, int24 lastMinTick, DistributionType lastDistributionType, bytes28 lastBaseLdfParams)
     {
-        // | initialized - 1 byte | lastMinTick - 3 bytes | lastLdfParams - 28 bytes |
-        initialized = uint8(bytes1(ldfState)) == 1;
+        // | lastDistributionType - 1 byte | lastMinTick - 3 bytes | lastBaseLdfParams - 28 bytes |
+        lastDistributionType = DistributionType(uint8(bytes1(ldfState)));
         lastMinTick = int24(uint24(bytes3(ldfState << 8)));
-        lastLdfParams = ldfState << 32;
+        lastBaseLdfParams = bytes28(ldfState << 32);
+        initialized = lastDistributionType != DistributionType.NULL;
     }
 
-    function _encodeState(int24 lastTwapTick, bytes32 lastLdfParams) internal pure returns (bytes32 ldfState) {
-        // | initialized - 1 byte | lastTwapTick - 3 bytes | lastLdfParams - 28 bytes |
-        ldfState = bytes32(abi.encodePacked(true, lastTwapTick, lastLdfParams));
+    function _encodeState(int24 lastTwapTick, DistributionType lastDistributionType, bytes28 lastBaseLdfParams)
+        internal
+        pure
+        returns (bytes32 ldfState)
+    {
+        // | lastDistributionType - 1 byte | lastTwapTick - 3 bytes | lastBaseLdfParams - 28 bytes |
+        ldfState = bytes32(abi.encodePacked(lastDistributionType, lastTwapTick, lastBaseLdfParams));
     }
 
     function _enforceUniformShiftMode(
