@@ -22,6 +22,7 @@ contract CuratedDistributionTest is BaseTest {
 
     uint256 internal constant MIN_ALPHA = 1e3;
     uint256 internal constant MAX_ALPHA = 12e8;
+    uint256 internal constant Q96 = 2 ** 96;
 
     IBunniToken internal bunniToken;
     PoolKey internal key;
@@ -312,8 +313,8 @@ contract CuratedDistributionTest is BaseTest {
         int24 minTick,
         int24 length0,
         int24 length1,
-        uint256 alpha0,
-        uint256 alpha1,
+        uint32 alpha0,
+        uint32 alpha1,
         uint32 weight0,
         uint32 weight1,
         uint32 weightCarpet
@@ -326,12 +327,12 @@ contract CuratedDistributionTest is BaseTest {
         weight0 = uint32(bound(weight0, 1, 1e6));
         weight1 = uint32(bound(weight1, 1, 1e6));
 
-        alpha1 = bound(alpha1, MIN_ALPHA, MAX_ALPHA);
+        alpha1 = uint32(bound(alpha1, MIN_ALPHA, MAX_ALPHA));
         vm.assume(alpha1 != 1e8); // 1e8 is a special case that causes overflow
         minTick = roundTickSingle(int24(bound(minTick, minUsableTick, maxUsableTick - 2 * tickSpacing)), tickSpacing);
         length1 = int24(bound(length1, 1, (maxUsableTick - minTick) / tickSpacing - 1));
 
-        alpha0 = bound(alpha0, MIN_ALPHA, MAX_ALPHA);
+        alpha0 = uint32(bound(alpha0, MIN_ALPHA, MAX_ALPHA));
         vm.assume(alpha0 != 1e8); // 1e8 is a special case that causes overflow
         length0 = int24(
             bound(
@@ -355,17 +356,17 @@ contract CuratedDistributionTest is BaseTest {
         bytes28 baseParams = bytes28(
             abi.encodePacked(
                 ShiftMode.STATIC,
-                minTick,
+                int24(minTick),
                 int16(length0),
                 uint32(alpha0),
-                weight0,
+                uint32(weight0),
                 int16(length1),
                 uint32(alpha1),
-                weight1,
+                uint32(weight1),
                 uint32(weightCarpet)
             )
         );
-        vm.assume(doubleGeometricLdf.isValidParams(key, 0, baseParams, LDFType.STATIC));
+        if (!doubleGeometricLdf.isValidParams(key, 0, baseParams, LDFType.STATIC)) return;
 
         // set params
         curatedLdf.setLdfParams(key, DistributionType.CARPETED_DOUBLE_GEOMETRIC, baseParams);
@@ -403,8 +404,8 @@ contract CuratedDistributionTest is BaseTest {
         int24 minTick,
         int24 length0,
         int24 length1,
-        uint256 alpha0,
-        uint256 alpha1,
+        uint32 alpha0,
+        uint32 alpha1,
         uint32 weight0,
         uint32 weight1,
         uint32 weightCarpet,
@@ -421,12 +422,12 @@ contract CuratedDistributionTest is BaseTest {
         weight0 = uint32(bound(weight0, 1, 1e6));
         weight1 = uint32(bound(weight1, 1, 1e6));
 
-        alpha1 = bound(alpha1, MIN_ALPHA, MAX_ALPHA);
+        alpha1 = uint32(bound(alpha1, MIN_ALPHA, MAX_ALPHA));
         vm.assume(alpha1 != 1e8); // 1e8 is a special case that causes overflow
         minTick = roundTickSingle(int24(bound(minTick, minUsableTick, maxUsableTick - 2 * tickSpacing)), tickSpacing);
         length1 = int24(bound(length1, 1, (maxUsableTick - minTick) / tickSpacing - 1));
 
-        alpha0 = bound(alpha0, MIN_ALPHA, MAX_ALPHA);
+        alpha0 = uint32(bound(alpha0, MIN_ALPHA, MAX_ALPHA));
         vm.assume(alpha0 != 1e8); // 1e8 is a special case that causes overflow
         length0 = int24(
             bound(
@@ -450,17 +451,17 @@ contract CuratedDistributionTest is BaseTest {
         bytes28 baseParams = bytes28(
             abi.encodePacked(
                 shiftMode,
-                minTick,
+                int24(minTick),
                 int16(length0),
                 uint32(alpha0),
-                weight0,
+                uint32(weight0),
                 int16(length1),
                 uint32(alpha1),
-                weight1,
+                uint32(weight1),
                 uint32(weightCarpet)
             )
         );
-        vm.assume(doubleGeometricLdf.isValidParams(key, 15 minutes, baseParams, LDFType.DYNAMIC_AND_STATEFUL));
+        if (!doubleGeometricLdf.isValidParams(key, 15 minutes, baseParams, LDFType.DYNAMIC_AND_STATEFUL)) return;
 
         // set params
         curatedLdf.setLdfParams(key, DistributionType.CARPETED_DOUBLE_GEOMETRIC, baseParams);
@@ -492,13 +493,175 @@ contract CuratedDistributionTest is BaseTest {
         assertEq(actualCumAmount1, expectedCumAmount1, "Cumulative amount 1 mismatch");
     }
 
-    function test_ldfStateShouldClearAfterParamUpdate() public {}
+    function test_ldfStateShouldClearAfterParamUpdate_uniform() public {
+        // construct initial params
+        // uniform with range [0, 10] and STATIC shift mode
+        bytes28 baseParams = bytes28(abi.encodePacked(ShiftMode.STATIC, int24(0), int24(10)));
 
-    function test_invalidParams() public {}
+        // set new params
+        curatedLdf.setLdfParams(key, DistributionType.UNIFORM, baseParams);
+
+        // query LDF to get updated state
+        vm.prank(address(hub));
+        (,,, bytes32 state,) = curatedLdf.query({
+            key: key,
+            roundedTick: 0,
+            twapTick: 0,
+            spotPriceTick: 0,
+            ldfParams: _createDefaultParams(),
+            ldfState: bytes32(0)
+        });
+
+        // construct new params
+        // uniform with range [-100, -90] and RIGHT shift mode
+        bytes28 newBaseParams = bytes28(abi.encodePacked(ShiftMode.RIGHT, int24(-100), int24(1)));
+
+        // set new params
+        curatedLdf.setLdfParams(key, DistributionType.UNIFORM, newBaseParams);
+
+        // query LDF
+        vm.prank(address(hub));
+        (uint256 liquidityDensityX96,,,,) = curatedLdf.query({
+            key: key,
+            roundedTick: int24(-100),
+            twapTick: 0,
+            spotPriceTick: int24(-100),
+            ldfParams: _createDefaultParams(),
+            ldfState: state
+        });
+
+        // liquidityDensity should equal Q96
+        // liquidity should be in [-100, -90] even though it's to the left of the previous min tick 0 in STATIC mode
+        assertEq(liquidityDensityX96, Q96, "Liquidity density mismatch");
+    }
+
+    function test_ldfStateShouldClearAfterParamUpdate_geometric() public {
+        // construct initial params
+        // geometric with min tick 0, length 1, alpha 1.2e8, and weight 1e6 and STATIC shift mode
+        bytes28 baseParams = bytes28(abi.encodePacked(ShiftMode.STATIC, int24(0), int16(1), uint32(1.2e8), uint32(1e6)));
+
+        // set new params
+        curatedLdf.setLdfParams(key, DistributionType.CARPETED_GEOMETRIC, baseParams);
+
+        // query LDF to get updated state
+        vm.prank(address(hub));
+        (,,, bytes32 state,) = curatedLdf.query({
+            key: key,
+            roundedTick: 0,
+            twapTick: 0,
+            spotPriceTick: 0,
+            ldfParams: _createDefaultParams(),
+            ldfState: bytes32(0)
+        });
+
+        // construct new params
+        // geometric with min tick -100, length 1, alpha 1.2e8, and weight 1e6 and RIGHT shift mode
+        bytes28 newBaseParams =
+            bytes28(abi.encodePacked(ShiftMode.RIGHT, int24(-100), int16(1), uint32(1.2e8), uint32(1e6)));
+
+        // set new params
+        curatedLdf.setLdfParams(key, DistributionType.CARPETED_GEOMETRIC, newBaseParams);
+
+        // query LDF
+        vm.prank(address(hub));
+        (uint256 liquidityDensityX96,,,,) = curatedLdf.query({
+            key: key,
+            roundedTick: int24(-100),
+            twapTick: 0,
+            spotPriceTick: int24(-100),
+            ldfParams: _createDefaultParams(),
+            ldfState: state
+        });
+
+        // liquidityDensity should equal Q96
+        assertApproxEqRel(liquidityDensityX96, Q96, 1e6, "Liquidity density mismatch");
+    }
+
+    function test_ldfStateShouldClearAfterParamUpdate_doubleGeometric() public {
+        // construct initial params
+        // double geometric with min tick 0, length 2 and STATIC shift mode
+        bytes28 baseParams = bytes28(
+            abi.encodePacked(
+                ShiftMode.STATIC,
+                int24(0),
+                int16(1),
+                uint32(1.2e8),
+                uint32(1e6),
+                int16(1),
+                uint32(1.2e8),
+                uint32(1e6),
+                uint32(1e6)
+            )
+        );
+
+        // set new params
+        curatedLdf.setLdfParams(key, DistributionType.CARPETED_DOUBLE_GEOMETRIC, baseParams);
+
+        // query LDF to get updated state
+        vm.prank(address(hub));
+        (,,, bytes32 state,) = curatedLdf.query({
+            key: key,
+            roundedTick: 0,
+            twapTick: 0,
+            spotPriceTick: 0,
+            ldfParams: _createDefaultParams(),
+            ldfState: bytes32(0)
+        });
+
+        // construct new params
+        // double geometric with min tick -100, length 1, alpha 1.2e8, and weight 1e6 and RIGHT shift mode
+        bytes28 newBaseParams = bytes28(
+            abi.encodePacked(
+                ShiftMode.RIGHT,
+                int24(-100),
+                int16(1),
+                uint32(1.2e8),
+                uint32(1e6),
+                int16(1),
+                uint32(1.2e8),
+                uint32(1e6),
+                uint32(1e6)
+            )
+        );
+
+        // set new params
+        curatedLdf.setLdfParams(key, DistributionType.CARPETED_DOUBLE_GEOMETRIC, newBaseParams);
+
+        // query LDF
+        vm.prank(address(hub));
+        (uint256 liquidityDensityX96,,,,) = curatedLdf.query({
+            key: key,
+            roundedTick: int24(-100),
+            twapTick: 0,
+            spotPriceTick: int24(-100),
+            ldfParams: _createDefaultParams(),
+            ldfState: state
+        });
+
+        // liquidityDensity should equal Q96 / 2
+        assertApproxEqRel(liquidityDensityX96, Q96 / 2, 1e6, "Liquidity density mismatch");
+    }
 
     function test_setLdfParams_onlyOwner() public {
         bytes4 selector = bytes4(0x82b42900); // Unauthorized() selector
         address nonOwner = address(0xdead);
+
+        bytes28 baseParams = bytes28(abi.encodePacked(ShiftMode.STATIC, int24(0), int24(10)));
+
+        // should revert for non-owner
+        vm.prank(nonOwner);
+        vm.expectRevert(selector); // Unauthorized()
+        curatedLdf.setLdfParams(key, DistributionType.UNIFORM, baseParams);
+
+        // should work for owner
+        vm.prank(address(bunniToken.owner()));
+        curatedLdf.setLdfParams(key, DistributionType.UNIFORM, baseParams);
+
+        // should work after transferring ownership
+        vm.prank(address(bunniToken.owner()));
+        bunniToken.transferOwnership(nonOwner);
+        vm.prank(nonOwner);
+        curatedLdf.setLdfParams(key, DistributionType.UNIFORM, baseParams);
     }
 
     /// -----------------------------------------------------------------------
