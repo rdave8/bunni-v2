@@ -244,6 +244,7 @@ contract BunniQuoter is IBunniQuoter {
         swapFee = useAmAmmFee
             ? uint24(FixedPointMathLib.max(amAmmSwapFee, computeSurgeFee(lastSurgeTimestamp, hookParams.surgeFeeHalfLife)))
             : hookFeesBaseSwapFee;
+        (uint16 curatorFeeRate,,) = hook.getCuratorFees(id);
         if (exactIn) {
             // compute the swap fee and the hook fee (i.e. protocol fee)
             // swap fee is taken by decreasing the output amount
@@ -253,21 +254,23 @@ contract BunniQuoter is IBunniQuoter {
                 // and deducting it, we compute hook fees separately using hookFeesBaseSwapFee
                 // and charge it as an extra fee on the swap
                 uint32 hookFeeModifier = hook.getHookFeeModifier();
-                uint256 hookFeesAmount =
-                    outputAmount.mulDivUp(hookFeesBaseSwapFee, SWAP_FEE_BASE).mulDivUp(hookFeeModifier, MODIFIER_BASE);
+                uint256 baseSwapFeeAmount = outputAmount.mulDivUp(hookFeesBaseSwapFee, SWAP_FEE_BASE);
+                uint256 hookFeesAmount = baseSwapFeeAmount.mulDivUp(hookFeeModifier, MODIFIER_BASE);
+                uint256 curatorFeeAmount = baseSwapFeeAmount.mulDivUp(curatorFeeRate, CURATOR_FEE_BASE);
                 // the case when swapFee = computeSurgeFee(lastSurgeTimestamp, hookParams.surgeFeeHalfLife)
                 if (swapFee != amAmmSwapFee) {
-                    // am-Amm manager's fee is in range [amAmmSwapFee, 100% - hookFeesBaseSwapFee.mulDivUp(env.hookFeeModifier, MODIFIER_BASE)]
+                    // am-Amm manager's fee is in range [amAmmSwapFee, 100% - hookFeesBaseSwapFee.mulDivUp(env.hookFeeModifier, MODIFIER_BASE)] - hookFeesBaseSwapFee.mulDivUp(curatorFeeRate, CURATOR_FEE_BASE)]
                     swapFee = uint24(
                         FixedPointMathLib.max(
-                            amAmmSwapFee, swapFee - hookFeesBaseSwapFee.mulDivUp(hookFeeModifier, MODIFIER_BASE)
+                            amAmmSwapFee,
+                            swapFee - hookFeesBaseSwapFee.mulDivUp(hookFeeModifier, MODIFIER_BASE)
+                                - hookFeesBaseSwapFee.mulDivUp(curatorFeeRate, CURATOR_FEE_BASE)
                         )
                     );
                     // recalculate swapFeeAmount
                     swapFeeAmount = outputAmount.mulDivUp(swapFee, SWAP_FEE_BASE);
                 }
-                swapFeeAmount += hookFeesAmount; // add hook fees to swapFeeAmount since we're only using it for computing inputAmount
-                swapFee += uint24(hookFeesBaseSwapFee.mulDivUp(hookFeeModifier, MODIFIER_BASE)); // modify effective swap fee for swapper
+                swapFeeAmount += hookFeesAmount + curatorFeeAmount; // add hook fees and curator fees to swapFeeAmount since we're only using it for computing outputAmount
             }
             outputAmount -= swapFeeAmount;
 
@@ -284,10 +287,11 @@ contract BunniQuoter is IBunniQuoter {
                 // and deducting it, we compute hook fees separately using hookFeesBaseSwapFee
                 // and charge it as an extra fee on the swap
                 uint32 hookFeeModifier = hook.getHookFeeModifier();
-                uint256 hookFeesAmount = inputAmount.mulDivUp(hookFeesBaseSwapFee, SWAP_FEE_BASE - hookFeesBaseSwapFee)
-                    .mulDivUp(hookFeeModifier, MODIFIER_BASE);
-                swapFeeAmount += hookFeesAmount; // add hook fees to swapFeeAmount since we're only using it for computing inputAmount
-                swapFee += uint24(hookFeesBaseSwapFee.mulDivUp(hookFeeModifier, MODIFIER_BASE)); // modify effective swap fee for swapper
+                uint256 baseSwapFeeAmount =
+                    inputAmount.mulDivUp(hookFeesBaseSwapFee, SWAP_FEE_BASE - hookFeesBaseSwapFee);
+                uint256 hookFeesAmount = baseSwapFeeAmount.mulDivUp(hookFeeModifier, MODIFIER_BASE);
+                uint256 curatorFeeAmount = baseSwapFeeAmount.mulDivUp(curatorFeeRate, CURATOR_FEE_BASE);
+                swapFeeAmount += hookFeesAmount + curatorFeeAmount; // add hook fees and curator fees to swapFeeAmount since we're only using it for computing inputAmount
             }
             inputAmount += swapFeeAmount;
 

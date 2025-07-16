@@ -7,6 +7,7 @@ import {IAmAmm} from "biddog/interfaces/IAmAmm.sol";
 
 import "./BaseTest.sol";
 import {BunniStateLibrary} from "../src/lib/BunniStateLibrary.sol";
+import {UniformDistribution} from "../src/ldf/UniformDistribution.sol";
 
 contract BunniHookTest is BaseTest {
     using TickMath for *;
@@ -951,6 +952,165 @@ contract BunniHookTest is BaseTest {
             actualInputAmount = beforeInputTokenBalance - inputToken.balanceOfSelf();
             actualOutputAmount = outputToken.balanceOfSelf() - beforeOutputTokenBalance;
         }
+
+        // check if actual amounts match quoted amounts
+        assertEq(actualInputAmount, inputAmount, "actual input amount doesn't match quoted input amount");
+        assertEq(actualOutputAmount, outputAmount, "actual output amount doesn't match quoted output amount");
+    }
+
+    function test_fuzz_quoter_quoteSwap_withCuratorFee(uint256 swapAmount, bool zeroForOne, bool amAmmEnabled)
+        external
+    {
+        swapAmount = bound(swapAmount, 1e6, 1e36);
+
+        // deploy mock hooklet with all flags
+        bytes32 salt;
+        unchecked {
+            bytes memory creationCode = type(HookletMock).creationCode;
+            for (uint256 offset; offset < 100000; offset++) {
+                salt = bytes32(offset);
+                address deployed = computeAddress(address(this), salt, creationCode);
+                if (
+                    uint160(bytes20(deployed)) & HookletLib.ALL_FLAGS_MASK == HookletLib.ALL_FLAGS_MASK
+                        && deployed.code.length == 0
+                ) {
+                    break;
+                }
+            }
+        }
+        HookletMock hooklet = new HookletMock{salt: salt}();
+
+        ILiquidityDensityFunction ldf_ = new UniformDistribution(address(hub), address(bunniHook), address(quoter));
+        bytes32 ldfParams =
+            bytes32(abi.encodePacked(ShiftMode.STATIC, int24(-5) * TICK_SPACING, int24(5) * TICK_SPACING));
+
+        (IBunniToken bunniToken, PoolKey memory key) = hub.deployBunniToken(
+            IBunniHub.DeployBunniTokenParams({
+                currency0: Currency.wrap(address(token0)),
+                currency1: Currency.wrap(address(token1)),
+                tickSpacing: TICK_SPACING,
+                twapSecondsAgo: 0,
+                liquidityDensityFunction: ldf_,
+                hooklet: hooklet,
+                ldfType: LDFType.STATIC,
+                ldfParams: ldfParams,
+                hooks: bunniHook,
+                hookParams: abi.encodePacked(
+                    FEE_MIN,
+                    FEE_MAX,
+                    FEE_QUADRATIC_MULTIPLIER,
+                    FEE_TWAP_SECONDS_AGO,
+                    POOL_MAX_AMAMM_FEE,
+                    SURGE_HALFLIFE,
+                    SURGE_AUTOSTART_TIME,
+                    VAULT_SURGE_THRESHOLD_0,
+                    VAULT_SURGE_THRESHOLD_1,
+                    REBALANCE_THRESHOLD,
+                    REBALANCE_MAX_SLIPPAGE,
+                    REBALANCE_TWAP_SECONDS_AGO,
+                    REBALANCE_ORDER_TTL,
+                    amAmmEnabled,
+                    ORACLE_MIN_INTERVAL,
+                    uint48(1)
+                ),
+                vault0: ERC4626(address(0)),
+                vault1: ERC4626(address(0)),
+                minRawTokenRatio0: 0.08e6,
+                targetRawTokenRatio0: 0.1e6,
+                maxRawTokenRatio0: 0.12e6,
+                minRawTokenRatio1: 0.08e6,
+                targetRawTokenRatio1: 0.1e6,
+                maxRawTokenRatio1: 0.12e6,
+                sqrtPriceX96: TickMath.getSqrtPriceAtTick(4),
+                name: bytes32("BunniToken"),
+                symbol: bytes32("BUNNI-LP"),
+                owner: address(this),
+                metadataURI: "metadataURI",
+                salt: ""
+            })
+        );
+
+        // make initial deposit to avoid accounting for MIN_INITIAL_SHARES
+        uint256 depositAmount0 = PRECISION;
+        uint256 depositAmount1 = PRECISION;
+        vm.startPrank(address(0x6969));
+        token0.approve(address(PERMIT2), type(uint256).max);
+        token1.approve(address(PERMIT2), type(uint256).max);
+        weth.approve(address(PERMIT2), type(uint256).max);
+        PERMIT2.approve(address(token0), address(hub), type(uint160).max, type(uint48).max);
+        PERMIT2.approve(address(token1), address(hub), type(uint160).max, type(uint48).max);
+        PERMIT2.approve(address(weth), address(hub), type(uint160).max, type(uint48).max);
+        vm.stopPrank();
+
+        _makeDepositWithFee(key, depositAmount0, depositAmount1, address(0x6969), 0, 0, "");
+
+        vm.prank(HOOK_FEE_RECIPIENT_CONTROLLER);
+        bunniHook.setHookFeeRecipient(HOOK_FEE_RECIPIENT);
+        bunniHook.setHookFeeModifier(HOOK_FEE_MODIFIER);
+        bunniHook.curatorSetFeeRate(key.toId(), uint16(MAX_CURATOR_FEE));
+
+        if (amAmmEnabled) {
+            _makeDeposit(key, 1_000_000_000 * depositAmount0, 1_000_000_000 * depositAmount1, address(this), "");
+
+            bunniToken.approve(address(bunniHook), type(uint256).max);
+            bunniHook.bid({
+                id: key.toId(),
+                manager: address(this),
+                payload: bytes6(bytes3(POOL_MAX_AMAMM_FEE)),
+                rent: 1e18,
+                deposit: uint128(K) * 1e18
+            });
+
+            skipBlocks(K);
+
+            IAmAmm.Bid memory bid = bunniHook.getBid(key.toId(), true);
+            assertEq(bid.manager, address(this), "manager incorrect");
+        }
+
+        (Currency inputToken, Currency outputToken) =
+            zeroForOne ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
+        _mint(inputToken, address(this), swapAmount * 2);
+        IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
+            zeroForOne: zeroForOne,
+            amountSpecified: -int256(swapAmount),
+            sqrtPriceLimitX96: zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
+        });
+
+        // quote swap
+        (bool success,,, uint256 inputAmount, uint256 outputAmount, uint24 swapFee,) =
+            quoter.quoteSwap(address(this), key, params);
+        assertTrue(success, "quoteSwap failed");
+
+        // execute swap
+        uint256 actualInputAmount;
+        uint256 actualOutputAmount;
+        {
+            uint256 beforeInputTokenBalance = inputToken.balanceOfSelf();
+            uint256 beforeOutputTokenBalance = outputToken.balanceOfSelf();
+            vm.recordLogs();
+            swapper.swap(key, params, type(uint256).max, 0);
+            actualInputAmount = beforeInputTokenBalance - inputToken.balanceOfSelf();
+            actualOutputAmount = outputToken.balanceOfSelf() - beforeOutputTokenBalance;
+        }
+
+        // check if swapFee matches
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        Vm.Log memory swapLog;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (
+                logs[i].emitter == address(bunniHook)
+                    && logs[i].topics[0]
+                        == keccak256("Swap(bytes32,address,bool,bool,uint256,uint256,uint160,int24,uint24,uint256)")
+            ) {
+                swapLog = logs[i];
+                break;
+            }
+        }
+
+        // parse log and extract swapFee from calldata
+        (,,,,,, uint24 fee,) = abi.decode(swapLog.data, (bool, bool, uint256, uint256, uint160, int24, uint24, uint256));
+
+        assertEq(swapFee, fee, "swapFee doesn't match quoted swapFee");
 
         // check if actual amounts match quoted amounts
         assertEq(actualInputAmount, inputAmount, "actual input amount doesn't match quoted input amount");
