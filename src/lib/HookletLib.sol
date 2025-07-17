@@ -302,8 +302,14 @@ library HookletLib {
 
                 // clamp the override values to the valid range
                 fee = feeOverridden ? uint24(fee.clamp(0, SWAP_FEE_BASE - 1)) : 0;
-                sqrtPriceX96 =
-                    priceOverridden ? uint160(sqrtPriceX96.clamp(TickMath.MIN_SQRT_PRICE, TickMath.MAX_SQRT_PRICE)) : 0;
+                // fine to not set sqrtPriceX96 to 0 if not overridden since the value will be ignored
+                if (priceOverridden) {
+                    (int24 minUsableTick, int24 maxUsableTick) =
+                        (TickMath.minUsableTick(key.tickSpacing), TickMath.maxUsableTick(key.tickSpacing));
+                    (uint160 minSqrtPrice, uint160 maxSqrtPrice) =
+                        (minUsableTick.getSqrtPriceAtTick(), (maxUsableTick - 1).getSqrtPriceAtTick());
+                    sqrtPriceX96 = uint160(sqrtPriceX96.clamp(minSqrtPrice, maxSqrtPrice));
+                }
             }
         }
     }
