@@ -271,6 +271,7 @@ contract BunniQuoter is IBunniQuoter {
                     swapFeeAmount = outputAmount.mulDivUp(swapFee, SWAP_FEE_BASE);
                 }
                 swapFeeAmount += hookFeesAmount + curatorFeeAmount; // add hook fees and curator fees to swapFeeAmount since we're only using it for computing outputAmount
+                swapFee = uint24(swapFeeAmount.mulDiv(SWAP_FEE_BASE, outputAmount)); // modify effective swap fee for swapper
             }
             outputAmount -= swapFeeAmount;
 
@@ -292,6 +293,7 @@ contract BunniQuoter is IBunniQuoter {
                 uint256 hookFeesAmount = baseSwapFeeAmount.mulDivUp(hookFeeModifier, MODIFIER_BASE);
                 uint256 curatorFeeAmount = baseSwapFeeAmount.mulDivUp(curatorFeeRate, CURATOR_FEE_BASE);
                 swapFeeAmount += hookFeesAmount + curatorFeeAmount; // add hook fees and curator fees to swapFeeAmount since we're only using it for computing inputAmount
+                swapFee = uint24(swapFeeAmount.mulDiv(SWAP_FEE_BASE, inputAmount + swapFeeAmount)); // modify effective swap fee for swapper
             }
             inputAmount += swapFeeAmount;
 

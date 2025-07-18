@@ -414,6 +414,8 @@ library BunniHookLogic {
                     // recalculate swapFeeAmount
                     swapFeeAmount = outputAmount.mulDivUp(swapFee, SWAP_FEE_BASE);
                 }
+                uint256 totalSwapFeeAmount = swapFeeAmount + hookFeesAmount + curatorFeeAmount;
+                swapFee = uint24(totalSwapFeeAmount.mulDiv(SWAP_FEE_BASE, outputAmount)); // modify effective swap fee for swapper
             } else {
                 hookFeesAmount = swapFeeAmount.mulDivUp(env.hookFeeModifier, MODIFIER_BASE);
                 curatorFeeAmount = swapFeeAmount.mulDivUp(curatorFees.feeRate, CURATOR_FEE_BASE);
@@ -459,6 +461,8 @@ library BunniHookLogic {
                     inputAmount.mulDivUp(hookFeesBaseSwapFee, SWAP_FEE_BASE - hookFeesBaseSwapFee);
                 hookFeesAmount = baseSwapFeeAmount.mulDivUp(env.hookFeeModifier, MODIFIER_BASE);
                 curatorFeeAmount = baseSwapFeeAmount.mulDivUp(curatorFees.feeRate, CURATOR_FEE_BASE);
+                uint256 totalSwapFeeAmount = swapFeeAmount + hookFeesAmount + curatorFeeAmount;
+                swapFee = uint24(totalSwapFeeAmount.mulDiv(SWAP_FEE_BASE, inputAmount + totalSwapFeeAmount)); // modify effective swap fee for swapper
             } else {
                 hookFeesAmount = swapFeeAmount.mulDivUp(env.hookFeeModifier, MODIFIER_BASE);
                 curatorFeeAmount = swapFeeAmount.mulDivUp(curatorFees.feeRate, CURATOR_FEE_BASE);
