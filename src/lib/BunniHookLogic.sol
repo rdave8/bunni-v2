@@ -404,7 +404,7 @@ library BunniHookLogic {
                 // the case when swapFee = computeSurgeFee(lastSurgeTimestamp, hookParams.surgeFeeHalfLife)
                 if (swapFee != amAmmSwapFee) {
                     // am-Amm manager's fee is in range [amAmmSwapFee, 100% - hookFeesBaseSwapFee.mulDivUp(env.hookFeeModifier, MODIFIER_BASE) - hookFeesBaseSwapFee.mulDivUp(curatorFees.feeRate, CURATOR_FEE_BASE)]
-                    uint24 swapFeeAdjusted = uint24(
+                    swapFee = uint24(
                         FixedPointMathLib.max(
                             amAmmSwapFee,
                             swapFee - hookFeesBaseSwapFee.mulDivUp(env.hookFeeModifier, MODIFIER_BASE)
@@ -412,8 +412,10 @@ library BunniHookLogic {
                         )
                     );
                     // recalculate swapFeeAmount
-                    swapFeeAmount = outputAmount.mulDivUp(swapFeeAdjusted, SWAP_FEE_BASE);
+                    swapFeeAmount = outputAmount.mulDivUp(swapFee, SWAP_FEE_BASE);
                 }
+                uint256 totalSwapFeeAmount = swapFeeAmount + hookFeesAmount + curatorFeeAmount;
+                swapFee = uint24(totalSwapFeeAmount.mulDiv(SWAP_FEE_BASE, outputAmount)); // modify effective swap fee for swapper
             } else {
                 hookFeesAmount = swapFeeAmount.mulDivUp(env.hookFeeModifier, MODIFIER_BASE);
                 curatorFeeAmount = swapFeeAmount.mulDivUp(curatorFees.feeRate, CURATOR_FEE_BASE);
@@ -459,6 +461,8 @@ library BunniHookLogic {
                     inputAmount.mulDivUp(hookFeesBaseSwapFee, SWAP_FEE_BASE - hookFeesBaseSwapFee);
                 hookFeesAmount = baseSwapFeeAmount.mulDivUp(env.hookFeeModifier, MODIFIER_BASE);
                 curatorFeeAmount = baseSwapFeeAmount.mulDivUp(curatorFees.feeRate, CURATOR_FEE_BASE);
+                uint256 totalSwapFeeAmount = swapFeeAmount + hookFeesAmount + curatorFeeAmount;
+                swapFee = uint24(totalSwapFeeAmount.mulDiv(SWAP_FEE_BASE, inputAmount + totalSwapFeeAmount)); // modify effective swap fee for swapper
             } else {
                 hookFeesAmount = swapFeeAmount.mulDivUp(env.hookFeeModifier, MODIFIER_BASE);
                 curatorFeeAmount = swapFeeAmount.mulDivUp(curatorFees.feeRate, CURATOR_FEE_BASE);

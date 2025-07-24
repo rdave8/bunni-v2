@@ -15,6 +15,7 @@ import {IBunniToken} from "../interfaces/IBunniToken.sol";
 
 /// @dev Adapted from Uniswap v4's Hooks.sol
 library HookletLib {
+    using TickMath for *;
     using CustomRevert for bytes4;
     using HookletLib for IHooklet;
     using FixedPointMathLib for *;
@@ -300,9 +301,15 @@ library HookletLib {
                 priceOverridden = canOverridePrice && priceOverridden;
 
                 // clamp the override values to the valid range
-                fee = feeOverridden ? uint24(fee.clamp(0, SWAP_FEE_BASE)) : 0;
-                sqrtPriceX96 =
-                    priceOverridden ? uint160(sqrtPriceX96.clamp(TickMath.MIN_SQRT_PRICE, TickMath.MAX_SQRT_PRICE)) : 0;
+                fee = feeOverridden ? uint24(fee.clamp(0, SWAP_FEE_BASE - 1)) : 0;
+                // fine to not set sqrtPriceX96 to 0 if not overridden since the value will be ignored
+                if (priceOverridden) {
+                    (int24 minUsableTick, int24 maxUsableTick) =
+                        (TickMath.minUsableTick(key.tickSpacing), TickMath.maxUsableTick(key.tickSpacing));
+                    (uint160 minSqrtPrice, uint160 maxSqrtPrice) =
+                        (minUsableTick.getSqrtPriceAtTick(), (maxUsableTick - 1).getSqrtPriceAtTick());
+                    sqrtPriceX96 = uint160(sqrtPriceX96.clamp(minSqrtPrice, maxSqrtPrice));
+                }
             }
         }
     }
@@ -349,9 +356,15 @@ library HookletLib {
             priceOverridden = canOverridePrice && priceOverridden;
 
             // clamp the override values to the valid range
-            fee = feeOverridden ? uint24(fee.clamp(0, SWAP_FEE_BASE)) : 0;
-            sqrtPriceX96 =
-                priceOverridden ? uint160(sqrtPriceX96.clamp(TickMath.MIN_SQRT_PRICE, TickMath.MAX_SQRT_PRICE)) : 0;
+            fee = feeOverridden ? uint24(fee.clamp(0, SWAP_FEE_BASE - 1)) : 0;
+            // fine to not set sqrtPriceX96 to 0 if not overridden since the value will be ignored
+            if (priceOverridden) {
+                (int24 minUsableTick, int24 maxUsableTick) =
+                    (TickMath.minUsableTick(key.tickSpacing), TickMath.maxUsableTick(key.tickSpacing));
+                (uint160 minSqrtPrice, uint160 maxSqrtPrice) =
+                    (minUsableTick.getSqrtPriceAtTick(), (maxUsableTick - 1).getSqrtPriceAtTick());
+                sqrtPriceX96 = uint160(sqrtPriceX96.clamp(minSqrtPrice, maxSqrtPrice));
+            }
         } else {
             return (true, false, 0, false, 0);
         }

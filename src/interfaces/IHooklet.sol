@@ -54,23 +54,6 @@ interface IHooklet {
         uint256 totalLiquidity;
     }
 
-    /// @notice Overrides the swap fee of a pool before the swap is executed.
-    /// Ignored if the pool has an am-AMM manager.
-    /// @member overridden If true, the swap fee is overridden.
-    /// @member fee The swap fee to use for the swap. 6 decimals.
-    struct BeforeSwapFeeOverride {
-        bool overridden;
-        uint24 fee;
-    }
-
-    /// @notice Overrides the pool's spot price before the swap is executed.
-    /// @member overridden If true, the pool's spot price is overridden.
-    /// @member sqrtPriceX96 The spot price to use for the swap. Q96 value.
-    struct BeforeSwapPriceOverride {
-        bool overridden;
-        uint160 sqrtPriceX96;
-    }
-
     /// @notice Called before a BunniToken transfer operation.
     /// @param sender The address that initiated the transfer.
     /// @param key The Uniswap v4 pool's key.
@@ -238,8 +221,6 @@ interface IHooklet {
         returns (bytes4 selector, bool feeOverriden, uint24 fee, bool priceOverridden, uint160 sqrtPriceX96);
 
     /// @notice Called after a swap operation.
-    /// @dev Also called after a rebalance order execution, in which case returnData will only have
-    /// inputAmount and outputAmount filled out.
     /// @param sender The address of the account that initiated the swap.
     /// @param key The Uniswap v4 pool's key.
     /// @param params The swap's input parameters.
