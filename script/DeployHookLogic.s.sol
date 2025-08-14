@@ -9,11 +9,9 @@ contract DeployHookLogicScript is CREATE3Script {
     constructor() CREATE3Script(vm.envString("VERSION")) {}
 
     function run() external returns (address hookLogic, bytes32 hookLogicSalt) {
-        uint256 deployerPrivateKey = uint256(vm.envBytes32("PRIVATE_KEY"));
-
         hookLogicSalt = getCreate3SaltFromEnv("BunniHookLogic");
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast(vm.envAddress("DEPLOYER"));
 
         hookLogic = create3.deploy(hookLogicSalt, type(BunniHookLogic).creationCode);
 

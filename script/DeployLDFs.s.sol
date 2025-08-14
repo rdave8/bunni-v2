@@ -30,8 +30,6 @@ contract DeployLDFsScript is CREATE3Script {
             bytes32 buyTheDipGeometricSalt
         )
     {
-        uint256 deployerPrivateKey = uint256(vm.envBytes32("PRIVATE_KEY"));
-
         address hub = getCreate3ContractFromEnvSalt("BunniHub");
         address hook = getCreate3ContractFromEnvSalt("BunniHook");
         address quoter = getCreate3ContractFromEnvSalt("BunniQuoter");
@@ -43,7 +41,7 @@ contract DeployLDFsScript is CREATE3Script {
         uniformSalt = getCreate3SaltFromEnv("UniformDistribution");
         buyTheDipGeometricSalt = getCreate3SaltFromEnv("BuyTheDipGeometricDistribution");
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast(vm.envAddress("DEPLOYER"));
 
         geometric = GeometricDistribution(
             payable(

@@ -13,15 +13,13 @@ contract DeployZoneScript is CREATE3Script {
     constructor() CREATE3Script(vm.envString("VERSION")) {}
 
     function run() external returns (BunniZone zone, bytes32 zoneSalt) {
-        uint256 deployerPrivateKey = uint256(vm.envBytes32("PRIVATE_KEY"));
-
         address owner = vm.envAddress("OWNER");
         address[] memory initialZoneWhitelist =
             vm.envAddress(string.concat("FULFILLER_LIST_", block.chainid.toString()), ",");
 
         zoneSalt = getCreate3SaltFromEnv("BunniZone");
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast(vm.envAddress("DEPLOYER"));
 
         zone = BunniZone(
             payable(

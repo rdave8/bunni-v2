@@ -13,12 +13,10 @@ contract DeployLibrariesScript is CREATE3Script {
         external
         returns (address swapMathLib, address rebalanceLib, bytes32 swapMathSalt, bytes32 rebalanceSalt)
     {
-        uint256 deployerPrivateKey = uint256(vm.envBytes32("PRIVATE_KEY"));
-
         swapMathSalt = getCreate3SaltFromEnv("BunniSwapMath");
         rebalanceSalt = getCreate3SaltFromEnv("RebalanceLogic");
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast(vm.envAddress("DEPLOYER"));
 
         swapMathLib = create3.deploy(swapMathSalt, type(BunniSwapMath).creationCode);
         rebalanceLib = create3.deploy(rebalanceSalt, type(RebalanceLogic).creationCode);

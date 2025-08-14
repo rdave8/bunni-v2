@@ -14,8 +14,6 @@ contract DeployHubScript is CREATE3Script {
     constructor() CREATE3Script(vm.envString("VERSION")) {}
 
     function run() external returns (BunniHub hub, bytes32 hubSalt) {
-        uint256 deployerPrivateKey = uint256(vm.envBytes32("PRIVATE_KEY"));
-
         address poolManager = vm.envAddress(string.concat("POOL_MANAGER_", block.chainid.toString()));
         address weth = vm.envAddress(string.concat("WETH_", block.chainid.toString()));
         address owner = vm.envAddress("OWNER");
@@ -25,7 +23,7 @@ contract DeployHubScript is CREATE3Script {
         address[] memory hookWhitelist = new address[](1);
         hookWhitelist[0] = getCreate3ContractFromEnvSalt("BunniHook");
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast(vm.envAddress("DEPLOYER"));
 
         hub = BunniHub(
             payable(

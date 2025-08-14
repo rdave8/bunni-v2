@@ -9,11 +9,9 @@ contract DeployHubLogicScript is CREATE3Script {
     constructor() CREATE3Script(vm.envString("VERSION")) {}
 
     function run() external returns (address hubLogic, bytes32 hubLogicSalt) {
-        uint256 deployerPrivateKey = uint256(vm.envBytes32("PRIVATE_KEY"));
-
         hubLogicSalt = getCreate3SaltFromEnv("BunniHubLogic");
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast(vm.envAddress("DEPLOYER"));
 
         hubLogic = create3.deploy(hubLogicSalt, type(BunniHubLogic).creationCode);
 

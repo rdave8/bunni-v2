@@ -8,8 +8,6 @@ contract DeployOracleUniGeoLDFScript is CREATE3Script {
     constructor() CREATE3Script(vm.envString("VERSION")) {}
 
     function run() external returns (OracleUniGeoDistribution oracleUniGeo, bytes32 oracleUniGeoSalt) {
-        uint256 deployerPrivateKey = uint256(vm.envBytes32("PRIVATE_KEY"));
-
         address hub = getCreate3ContractFromEnvSalt("BunniHub");
         address hook = getCreate3ContractFromEnvSalt("BunniHook");
         address quoter = getCreate3ContractFromEnvSalt("BunniQuoter");
@@ -21,7 +19,7 @@ contract DeployOracleUniGeoLDFScript is CREATE3Script {
 
         oracleUniGeoSalt = getCreate3SaltFromEnv("OracleUniGeoDistribution");
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast(vm.envAddress("DEPLOYER"));
 
         oracleUniGeo = OracleUniGeoDistribution(
             create3.deploy(

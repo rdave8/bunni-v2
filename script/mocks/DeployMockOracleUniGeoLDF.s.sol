@@ -19,8 +19,6 @@ contract DeployMockOracleUniGeoLDFScript is CREATE3Script {
             address oracleAddress
         )
     {
-        uint256 deployerPrivateKey = uint256(vm.envBytes32("PRIVATE_KEY"));
-
         address hub = getCreate3ContractFromEnvSalt("BunniHub");
         address hook = getCreate3ContractFromEnvSalt("BunniHook");
         address quoter = getCreate3ContractFromEnvSalt("BunniQuoter");
@@ -28,7 +26,7 @@ contract DeployMockOracleUniGeoLDFScript is CREATE3Script {
 
         oracleUniGeoSalt = getCreate3SaltFromEnv("OracleUniGeoDistribution");
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast(vm.envAddress("DEPLOYER"));
 
         // Deploy mock ERC20 tokens
         ERC20Mock bond = new ERC20Mock();

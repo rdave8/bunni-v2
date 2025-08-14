@@ -12,14 +12,14 @@ To learn more, see:
 To install with [Foundry](https://github.com/gakonst/foundry):
 
 ```
-forge install timeless-fi/bunni-v2
+forge install bunniapp/bunni-v2
 ```
 
 ## Local development
 
 This project uses [Foundry](https://github.com/gakonst/foundry) as the development framework.
 
-Note: This project only compiles using Solidity `0.8.25` (and not `0.8.26`), but Uniswap's v4-core repo only compiles using Solidity 0.8.26. To develop locally, change the Solidity version of `lib/v4-core/src/PoolManager.sol` to `0.8.25`.
+Note: Uniswap's v4-core repo only compiles using Solidity 0.8.26. To develop locally, change the Solidity version of `lib/v4-core/src/PoolManager.sol` to `^0.8.25`.
 
 ### Dependencies
 
@@ -100,12 +100,12 @@ FOUNDRY_PROFILE=hook forge script script/DeployHook.s.sol -f [network] --librari
 ### Live
 
 ```bash
-FOUNDRY_PROFILE=gas forge script script/DeployLibraries.s.sol -f [network] --verify --broadcast --slow
-FOUNDRY_PROFILE=hub_logic forge script script/DeployHubLogic.s.sol -f [network] --verify --broadcast --slow
-FOUNDRY_PROFILE=hook_logic forge script script/DeployHookLogic.s.sol -f [network] --verify --broadcast --slow --libraries src/lib/BunniSwapMath.sol:BunniSwapMath:[swapMathLibAddress] --libraries src/lib/RebalanceLogic.sol:RebalanceLogic:[rebalanceLibAddress]
-FOUNDRY_PROFILE=hub forge script script/DeployHub.s.sol -f [network] --verify --broadcast --slow --libraries src/lib/BunniHubLogic.sol:BunniHubLogic:[hubLogicLibAddress]
-FOUNDRY_PROFILE=gas forge script script/DeployLDFs.s.sol -f [network] --verify --broadcast --slow
-FOUNDRY_PROFILE=gas forge script script/DeployZone.s.sol -f [network] --verify --broadcast --slow
-FOUNDRY_PROFILE=quoter forge script script/DeployBunniQuoter.s.sol -f [network] --verify --broadcast --slow --libraries src/lib/BunniSwapMath.sol:BunniSwapMath:[swapMathLibAddress] --libraries src/lib/RebalanceLogic.sol:RebalanceLogic:[rebalanceLibAddress] --libraries src/lib/BunniHookLogic.sol:BunniHookLogic:[hookLogicLibAddress]
-FOUNDRY_PROFILE=hook forge script script/DeployHook.s.sol -f [network] --verify --broadcast --slow --libraries src/lib/BunniHookLogic.sol:BunniHookLogic:[hookLogicLibAddress] --libraries src/lib/BunniSwapMath.sol:BunniSwapMath:[swapMathLibAddress] --libraries src/lib/RebalanceLogic.sol:RebalanceLogic:[rebalanceLibAddress]
+FOUNDRY_PROFILE=gas forge script script/DeployLibraries.s.sol -f [network] --verify --broadcast --slow --account [keystoreAccount]
+FOUNDRY_PROFILE=hub_logic forge script script/DeployHubLogic.s.sol -f [network] --verify --broadcast --slow --account [keystoreAccount]
+FOUNDRY_PROFILE=hook_logic forge script script/DeployHookLogic.s.sol -f [network] --verify --broadcast --slow --account [keystoreAccount] --libraries src/lib/BunniSwapMath.sol:BunniSwapMath:[swapMathLibAddress] --libraries src/lib/RebalanceLogic.sol:RebalanceLogic:[rebalanceLibAddress]
+FOUNDRY_PROFILE=hub forge script script/DeployHub.s.sol -f [network] --verify --broadcast --slow --account [keystoreAccount] --libraries src/lib/BunniHubLogic.sol:BunniHubLogic:[hubLogicLibAddress]
+FOUNDRY_PROFILE=gas forge script script/DeployLDFs.s.sol -f [network] --verify --broadcast --slow --account [keystoreAccount]
+FOUNDRY_PROFILE=gas forge script script/DeployZone.s.sol -f [network] --verify --broadcast --slow --account [keystoreAccount]
+FOUNDRY_PROFILE=quoter forge script script/DeployBunniQuoter.s.sol -f [network] --verify --broadcast --slow --account [keystoreAccount] --libraries src/lib/BunniSwapMath.sol:BunniSwapMath:[swapMathLibAddress] --libraries src/lib/RebalanceLogic.sol:RebalanceLogic:[rebalanceLibAddress] --libraries src/lib/BunniHookLogic.sol:BunniHookLogic:[hookLogicLibAddress]
+FOUNDRY_PROFILE=hook forge script script/DeployHook.s.sol -f [network] --verify --broadcast --slow --account [keystoreAccount] --libraries src/lib/BunniHookLogic.sol:BunniHookLogic:[hookLogicLibAddress] --libraries src/lib/BunniSwapMath.sol:BunniSwapMath:[swapMathLibAddress] --libraries src/lib/RebalanceLogic.sol:RebalanceLogic:[rebalanceLibAddress]
 ```

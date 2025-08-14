@@ -9,11 +9,9 @@ contract DeployBunniQuoterScript is CREATE3Script {
     constructor() CREATE3Script(vm.envString("VERSION")) {}
 
     function run() external returns (BunniQuoter quoter, bytes32 quoterSalt) {
-        uint256 deployerPrivateKey = uint256(vm.envBytes32("PRIVATE_KEY"));
-
         quoterSalt = getCreate3SaltFromEnv("BunniQuoter");
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast(vm.envAddress("DEPLOYER"));
 
         quoter = BunniQuoter(
             create3.deploy(

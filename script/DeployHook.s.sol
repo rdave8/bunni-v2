@@ -20,9 +20,7 @@ contract DeployNewHookScript is CREATE3Script {
     constructor() CREATE3Script(vm.envString("VERSION")) {}
 
     function run() external returns (BunniHook hook, bytes32 hookSalt) {
-        uint256 deployerPrivateKey = uint256(vm.envBytes32("PRIVATE_KEY"));
-
-        address deployer = vm.addr(deployerPrivateKey);
+        address deployer = vm.envAddress("DEPLOYER");
 
         address poolManager = vm.envAddress(string.concat("POOL_MANAGER_", block.chainid.toString()));
         address weth = vm.envAddress(string.concat("WETH_", block.chainid.toString()));
@@ -45,7 +43,7 @@ contract DeployNewHookScript is CREATE3Script {
             vm.etch(arbSys, arbSysCode);
         }
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast(deployer);
 
         uint256 hookFlags = Hooks.AFTER_INITIALIZE_FLAG + Hooks.BEFORE_ADD_LIQUIDITY_FLAG + Hooks.BEFORE_SWAP_FLAG
             + Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG;
