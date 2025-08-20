@@ -664,6 +664,23 @@ contract CuratedDistributionTest is BaseTest {
         curatedLdf.setLdfParams(key, DistributionType.UNIFORM, baseParams);
     }
 
+    function test_setInvalidLdfParamsPoC() public {
+        vm.startPrank(address(bunniToken.owner()));
+
+        // set inital valid override
+        curatedLdf.setLdfParams(
+            key, DistributionType.UNIFORM, bytes28(abi.encodePacked(ShiftMode.STATIC, int24(0), int24(10)))
+        );
+
+        // now set an invalid override with ShiftMode outside the actual range, min tick of the max int24 and negative length
+        vm.expectRevert("InvalidLdfParams()");
+        curatedLdf.setLdfParams(
+            key,
+            DistributionType.UNIFORM,
+            bytes28(abi.encodePacked(uint8(type(ShiftMode).max) + 42, type(int24).max, -int24(10)))
+        );
+    }
+
     /// -----------------------------------------------------------------------
     /// Internal helpers
     /// -----------------------------------------------------------------------

@@ -405,11 +405,6 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
             return false;
         }
 
-        // override ldf params if needed
-        PoolId id = key.toId();
-        bytes32 ldfParamsOverride_ = ldfParamsOverride[id];
-        ldfParams = ldfParamsOverride_ == bytes32(0) ? ldfParams : ldfParamsOverride_;
-
         // decode ldf params
         // distribution type is always the last byte of ldfParams
         // | baseLdfParams - 31 bytes | distributionType - 1 byte |
