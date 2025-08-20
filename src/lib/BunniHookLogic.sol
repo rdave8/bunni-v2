@@ -274,14 +274,6 @@ library BunniHookLogic {
         shouldSurge = shouldSurge && bunniState.ldfType != LDFType.STATIC; // only surge from LDF if LDF type is not static
         if (bunniState.ldfType == LDFType.DYNAMIC_AND_STATEFUL) s.ldfStates[id] = newLdfState;
 
-        if (shouldSurge) {
-            // the LDF has been updated, so we need to update the idle balance
-            env.hub.hookSetIdleBalance(
-                key,
-                IdleBalanceLibrary.computeIdleBalance(currentActiveBalance0, currentActiveBalance1, balance0, balance1)
-            );
-        }
-
         // check surge based on vault share prices
         shouldSurge =
             shouldSurge || _shouldSurgeFromVaults(s, id, bunniState, hookParams, reserveBalance0, reserveBalance1);
@@ -555,6 +547,16 @@ library BunniHookLogic {
                 delete s.rebalanceOrderHash[id];
                 delete s.rebalanceOrderPermit2Hash[id];
                 delete s.rebalanceOrderDeadline[id];
+
+                // the LDF has been updated, so we need to update the idle balance
+                PoolState memory ps = env.hub.poolState(key.toId());
+                IdleBalance newIdle = IdleBalanceLibrary.computeIdleBalance(
+                    currentActiveBalance0,
+                    currentActiveBalance1,
+                    ps.rawBalance0 + getReservesInUnderlying(ps.reserve0, ps.vault0),
+                    ps.rawBalance1 + getReservesInUnderlying(ps.reserve1, ps.vault1)
+                );
+                env.hub.hookSetIdleBalance(key, newIdle);
             }
 
             RebalanceLogic.rebalance(

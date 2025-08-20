@@ -507,7 +507,9 @@ contract BunniQuoter is IBunniQuoter {
         );
 
         // compute total liquidity at spot price
-        (totalLiquidity,,,,,,,) = queryLDF({
+        uint256 activeBalance0;
+        uint256 activeBalance1;
+        (totalLiquidity,,,, activeBalance0, activeBalance1,,) = queryLDF({
             key: key,
             sqrtPriceX96: updatedSqrtPriceX96,
             tick: updatedTick,
@@ -520,7 +522,9 @@ contract BunniQuoter is IBunniQuoter {
             idleBalance: bunniState.idleBalance
         });
 
-        (idleBalance, willRebalanceToken0) = bunniState.idleBalance.fromIdleBalance();
+        IdleBalance freshIdle =
+            IdleBalanceLibrary.computeIdleBalance(activeBalance0, activeBalance1, balance0, balance1);
+        (idleBalance, willRebalanceToken0) = freshIdle.fromIdleBalance();
 
         // compute target token densities of the excess liquidity after rebalancing
         // this is done by querying the LDF using a TWAP as the spot price to prevent manipulation
