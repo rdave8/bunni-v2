@@ -36,6 +36,13 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
 
     bytes32 internal constant BASE_LDF_PARAMS_MASK = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00;
 
+    // masks for sanitizing params
+    // shift mode is removed since when only the shift mode is modified the state should not be cleared
+    bytes28 internal constant UNIFORM_LDF_PARAMS_MASK = 0x00ffffffffffff000000000000000000000000000000000000000000;
+    bytes28 internal constant GEOMETRIC_LDF_PARAMS_MASK = 0x00ffffffffffffffffffffffffff0000000000000000000000000000;
+    bytes28 internal constant DOUBLE_GEOMETRIC_LDF_PARAMS_MASK =
+        0x00ffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+
     event SetLdfParamsOverride(
         PoolId indexed id, DistributionType indexed distributionType, bytes32 indexed baseLdfParams
     );
@@ -82,7 +89,11 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
             // for example, if the previous LDF was uniform with range [0, 10] and STATIC shift mode and the new
             // config is uniform with range [-100, -90] and RIGHT shift mode, if the state wasn't cleared then
             // the LDF will still be [0, 10] when it should really be [-100, -90].
-            if (lastBaseLdfParams != baseLdfParams || lastDistributionType != distro) {
+            if (
+                lastDistributionType != distro
+                    || _sanitizeBaseLdfParams(lastDistributionType, lastBaseLdfParams)
+                        != _sanitizeBaseLdfParams(distro, baseLdfParams)
+            ) {
                 shouldSurge = true;
                 initialized = false; // this tells the later logic to ignore the state
             }
@@ -396,7 +407,7 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
     /// @inheritdoc ILiquidityDensityFunction
     function isValidParams(PoolKey calldata key, uint24 twapSecondsAgo, bytes32 ldfParams, LDFType ldfType)
         public
-        view
+        pure
         override
         returns (bool)
     {
@@ -521,5 +532,16 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
         tickLowerEnforced =
             int24(FixedPointMathLib.max(minUsableTick, enforceShiftMode(tickLower, lastMinTick, shiftMode)));
         tickUpperEnforced = int24(FixedPointMathLib.min(maxUsableTick, tickLowerEnforced + tickLength));
+    }
+
+    /// @dev Mask out irrelevant bytes when checking if the params are actually different.
+    function _sanitizeBaseLdfParams(DistributionType distro, bytes28 baseLdfParams) internal pure returns (bytes28) {
+        if (distro == DistributionType.UNIFORM) {
+            return baseLdfParams & UNIFORM_LDF_PARAMS_MASK;
+        } else if (distro == DistributionType.CARPETED_GEOMETRIC) {
+            return baseLdfParams & GEOMETRIC_LDF_PARAMS_MASK;
+        } else {
+            return baseLdfParams & DOUBLE_GEOMETRIC_LDF_PARAMS_MASK;
+        }
     }
 }

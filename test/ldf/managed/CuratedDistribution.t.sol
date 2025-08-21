@@ -17,6 +17,30 @@ import {CarpetedGeometricDistribution} from "../../../src/ldf/CarpetedGeometricD
 import {DistributionType, CuratedDistribution} from "../../../src/ldf/managed/CuratedDistribution.sol";
 import {CarpetedDoubleGeometricDistribution} from "../../../src/ldf/CarpetedDoubleGeometricDistribution.sol";
 
+contract CuratedDistributionHarness is CuratedDistribution {
+    constructor(address hub_, address hook_, address quoter_) CuratedDistribution(hub_, hook_, quoter_) {}
+
+    function decodeLdfParams(bytes32 ldfParams)
+        external
+        pure
+        returns (DistributionType distro, bytes28 baseLdfParams)
+    {
+        (distro, baseLdfParams) = _decodeLdfParams(ldfParams);
+    }
+
+    function decodeState(bytes32 ldfState)
+        external
+        pure
+        returns (bool initialized, int24 lastMinTick, DistributionType lastDistributionType, bytes28 lastBaseLdfParams)
+    {
+        (initialized, lastMinTick, lastDistributionType, lastBaseLdfParams) = _decodeState(ldfState);
+    }
+
+    function sanitizeBaseLdfParams(DistributionType distro, bytes28 baseLdfParams) external pure returns (bytes28) {
+        return _sanitizeBaseLdfParams(distro, baseLdfParams);
+    }
+}
+
 contract CuratedDistributionTest is BaseTest {
     using PoolIdLibrary for PoolKey;
 
@@ -26,13 +50,13 @@ contract CuratedDistributionTest is BaseTest {
 
     IBunniToken internal bunniToken;
     PoolKey internal key;
-    CuratedDistribution internal curatedLdf;
+    CuratedDistributionHarness internal curatedLdf;
 
     function setUp() public override {
         super.setUp();
 
         // Deploy curated LDF
-        curatedLdf = new CuratedDistribution(address(hub), address(bunniHook), address(quoter));
+        curatedLdf = new CuratedDistributionHarness(address(hub), address(bunniHook), address(quoter));
 
         // Deploy Bunni pool with LDF
         (bunniToken, key) = _deployPoolAndInitLiquidity(curatedLdf, _createDefaultParams());
@@ -681,6 +705,76 @@ contract CuratedDistributionTest is BaseTest {
         );
     }
 
+    function test_surgeOnParamsUpdatePoC() public {
+        bytes32 ldfParams = _createDefaultParams();
+
+        // query LDF to initialize state
+        vm.prank(address(hub));
+        (,,, bytes32 state, bool shouldSurge) = curatedLdf.query({
+            key: key,
+            roundedTick: 0,
+            twapTick: 0,
+            spotPriceTick: 0,
+            ldfParams: ldfParams,
+            ldfState: bytes32(0)
+        });
+
+        // should not surge on init
+        assertFalse(shouldSurge, "Should not surge on init");
+
+        // construct new params by modifying the unused base params bytes
+        bytes28 newBaseParams =
+            bytes28(abi.encodePacked(ShiftMode.STATIC, int24(-100), int24(200), bytes20(0), uint8(42)));
+
+        // set new params
+        curatedLdf.setLdfParams(key, DistributionType.UNIFORM, newBaseParams);
+
+        // query LDF
+        vm.prank(address(hub));
+        (,,, state, shouldSurge) = curatedLdf.query({
+            key: key,
+            roundedTick: 0,
+            twapTick: 0,
+            spotPriceTick: 0,
+            ldfParams: ldfParams,
+            ldfState: state
+        });
+
+        assertFalse(shouldSurge, "Should not surge on params update if only unusued byte is updated");
+
+        (DistributionType distroBefore, bytes28 baseParamsBefore) = curatedLdf.decodeLdfParams(ldfParams);
+        bytes32 newLdfParams = bytes32(abi.encodePacked(newBaseParams, bytes3(0), DistributionType.UNIFORM));
+        (DistributionType distroAfter, bytes28 baseParamsAfter) = curatedLdf.decodeLdfParams(newLdfParams);
+
+        assertEq(
+            curatedLdf.sanitizeBaseLdfParams(distroBefore, baseParamsBefore),
+            curatedLdf.sanitizeBaseLdfParams(distroAfter, baseParamsAfter),
+            "Base params (sanitized) should be equal before and after update"
+        );
+
+        (
+            bool initializedBefore,
+            int24 lastMinTickBefore,
+            DistributionType lastDistributionTypeBefore,
+            bytes28 lastBaseLdfParamsBefore
+        ) = curatedLdf.decodeState(state);
+        (
+            bool initializedAfter,
+            int24 lastMinTickAfter,
+            DistributionType lastDistributionTypeAfter,
+            bytes28 lastBaseLdfParamsAfter
+        ) = curatedLdf.decodeState(state);
+
+        assertEq(initializedBefore, initializedAfter, "Initialized state should not change");
+        assertEq(lastMinTickBefore, lastMinTickAfter, "Last min tick should not change");
+        assertEq(
+            uint8(lastDistributionTypeBefore),
+            uint8(lastDistributionTypeAfter),
+            "Last distribution type should not change"
+        );
+        assertEq(lastBaseLdfParamsBefore, lastBaseLdfParamsAfter, "Last base LDF params should not change");
+    }
+
     /// -----------------------------------------------------------------------
     /// Internal helpers
     /// -----------------------------------------------------------------------
@@ -690,5 +784,39 @@ contract CuratedDistributionTest is BaseTest {
         // need the bytes24(0) to make distribution type the last byte
         return
             bytes32(abi.encodePacked(ShiftMode.STATIC, int24(-100), int24(200), bytes24(0), DistributionType.UNIFORM));
+    }
+
+    function _deployPoolAndInitLiquidity(ILiquidityDensityFunction ldf_, bytes32 ldfParams, bytes32 salt)
+        internal
+        returns (IBunniToken bunniToken, PoolKey memory key)
+    {
+        return _deployPoolAndInitLiquidity(
+            Currency.wrap(address(token0)),
+            Currency.wrap(address(token1)),
+            ERC4626(address(0)),
+            ERC4626(address(0)),
+            ldf_,
+            IHooklet(address(0)),
+            ldfParams,
+            abi.encodePacked(
+                FEE_MIN,
+                FEE_MAX,
+                FEE_QUADRATIC_MULTIPLIER,
+                FEE_TWAP_SECONDS_AGO,
+                POOL_MAX_AMAMM_FEE,
+                SURGE_HALFLIFE,
+                SURGE_AUTOSTART_TIME,
+                VAULT_SURGE_THRESHOLD_0,
+                VAULT_SURGE_THRESHOLD_1,
+                REBALANCE_THRESHOLD,
+                REBALANCE_MAX_SLIPPAGE,
+                REBALANCE_TWAP_SECONDS_AGO,
+                REBALANCE_ORDER_TTL,
+                true, // amAmmEnabled
+                ORACLE_MIN_INTERVAL,
+                MIN_RENT_MULTIPLIER
+            ),
+            salt
+        );
     }
 }
