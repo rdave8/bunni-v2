@@ -216,7 +216,11 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
             // for example, if the previous LDF was uniform with range [0, 10] and STATIC shift mode and the new
             // config is uniform with range [-100, -90] and RIGHT shift mode, if the state wasn't cleared then
             // the LDF will still be [0, 10] when it should really be [-100, -90].
-            if (lastBaseLdfParams != baseLdfParams || lastDistributionType != distro) {
+            if (
+                lastDistributionType != distro
+                    || _sanitizeBaseLdfParams(lastDistributionType, lastBaseLdfParams)
+                        != _sanitizeBaseLdfParams(distro, baseLdfParams)
+            ) {
                 initialized = false; // this tells the later logic to ignore the state
             }
         }
@@ -304,7 +308,11 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
             // for example, if the previous LDF was uniform with range [0, 10] and STATIC shift mode and the new
             // config is uniform with range [-100, -90] and RIGHT shift mode, if the state wasn't cleared then
             // the LDF will still be [0, 10] when it should really be [-100, -90].
-            if (lastBaseLdfParams != baseLdfParams || lastDistributionType != distro) {
+            if (
+                lastDistributionType != distro
+                    || _sanitizeBaseLdfParams(lastDistributionType, lastBaseLdfParams)
+                        != _sanitizeBaseLdfParams(distro, baseLdfParams)
+            ) {
                 initialized = false; // this tells the later logic to ignore the state
             }
         }
@@ -382,7 +390,11 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
             // for example, if the previous LDF was uniform with range [0, 10] and STATIC shift mode and the new
             // config is uniform with range [-100, -90] and RIGHT shift mode, if the state wasn't cleared then
             // the LDF will still be [0, 10] when it should really be [-100, -90].
-            if (lastBaseLdfParams != baseLdfParams || lastDistributionType != distro) {
+            if (
+                lastDistributionType != distro
+                    || _sanitizeBaseLdfParams(lastDistributionType, lastBaseLdfParams)
+                        != _sanitizeBaseLdfParams(distro, baseLdfParams)
+            ) {
                 initialized = false; // this tells the later logic to ignore the state
             }
         }
