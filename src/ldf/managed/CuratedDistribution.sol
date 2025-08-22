@@ -126,7 +126,7 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
             if (initialized) {
                 (tickLower, tickUpper) =
                     _enforceUniformShiftMode(tickLower, tickUpper, shiftMode, lastMinTick, key.tickSpacing);
-                shouldSurge = shouldSurge || tickLower != lastMinTick;
+                shouldSurge = tickLower != lastMinTick;
             }
 
             (liquidityDensityX96_, cumulativeAmount0DensityX96, cumulativeAmount1DensityX96) = LibUniformDistribution
@@ -139,7 +139,7 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
                 LibCarpetedGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
             if (initialized) {
                 minTick = enforceShiftMode(minTick, lastMinTick, shiftMode);
-                shouldSurge = shouldSurge || minTick != lastMinTick;
+                shouldSurge = minTick != lastMinTick;
             }
 
             (liquidityDensityX96_, cumulativeAmount0DensityX96, cumulativeAmount1DensityX96) =
@@ -159,7 +159,7 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
                 LibCarpetedDoubleGeometricDistribution.decodeParams(twapTick, key.tickSpacing, baseLdfParams);
             if (initialized) {
                 params.minTick = enforceShiftMode(params.minTick, lastMinTick, params.shiftMode);
-                shouldSurge = shouldSurge || params.minTick != lastMinTick;
+                shouldSurge = params.minTick != lastMinTick;
             }
 
             (liquidityDensityX96_, cumulativeAmount0DensityX96, cumulativeAmount1DensityX96) =
