@@ -46,12 +46,8 @@ contract UniformDistribution is ILiquidityDensityFunction, Guarded {
             LibUniformDistribution.decodeParams(twapTick, key.tickSpacing, ldfParams);
         (bool initialized, int24 lastTickLower) = _decodeState(ldfState);
         if (initialized) {
-            int24 tickLength = tickUpper - tickLower;
-            (int24 minUsableTick, int24 maxUsableTick) =
-                (TickMath.minUsableTick(key.tickSpacing), TickMath.maxUsableTick(key.tickSpacing));
-            tickLower =
-                int24(FixedPointMathLib.max(minUsableTick, enforceShiftMode(tickLower, lastTickLower, shiftMode)));
-            tickUpper = int24(FixedPointMathLib.min(maxUsableTick, tickLower + tickLength));
+            (tickLower, tickUpper) =
+                _enforceUniformShiftMode(tickLower, tickUpper, shiftMode, lastTickLower, key.tickSpacing);
             shouldSurge = tickLower != lastTickLower;
         }
 
@@ -88,9 +84,8 @@ contract UniformDistribution is ILiquidityDensityFunction, Guarded {
             LibUniformDistribution.decodeParams(twapTick, key.tickSpacing, ldfParams);
         (bool initialized, int24 lastTickLower) = _decodeState(ldfState);
         if (initialized) {
-            int24 tickLength = tickUpper - tickLower;
-            tickLower = enforceShiftMode(tickLower, lastTickLower, shiftMode);
-            tickUpper = tickLower + tickLength;
+            (tickLower, tickUpper) =
+                _enforceUniformShiftMode(tickLower, tickUpper, shiftMode, lastTickLower, key.tickSpacing);
         }
 
         return LibUniformDistribution.computeSwap(
@@ -112,9 +107,8 @@ contract UniformDistribution is ILiquidityDensityFunction, Guarded {
             LibUniformDistribution.decodeParams(twapTick, key.tickSpacing, ldfParams);
         (bool initialized, int24 lastTickLower) = _decodeState(ldfState);
         if (initialized) {
-            int24 tickLength = tickUpper - tickLower;
-            tickLower = enforceShiftMode(tickLower, lastTickLower, shiftMode);
-            tickUpper = tickLower + tickLength;
+            (tickLower, tickUpper) =
+                _enforceUniformShiftMode(tickLower, tickUpper, shiftMode, lastTickLower, key.tickSpacing);
         }
 
         return LibUniformDistribution.cumulativeAmount0(
@@ -136,9 +130,8 @@ contract UniformDistribution is ILiquidityDensityFunction, Guarded {
             LibUniformDistribution.decodeParams(twapTick, key.tickSpacing, ldfParams);
         (bool initialized, int24 lastTickLower) = _decodeState(ldfState);
         if (initialized) {
-            int24 tickLength = tickUpper - tickLower;
-            tickLower = enforceShiftMode(tickLower, lastTickLower, shiftMode);
-            tickUpper = tickLower + tickLength;
+            (tickLower, tickUpper) =
+                _enforceUniformShiftMode(tickLower, tickUpper, shiftMode, lastTickLower, key.tickSpacing);
         }
 
         return LibUniformDistribution.cumulativeAmount1(
@@ -165,5 +158,20 @@ contract UniformDistribution is ILiquidityDensityFunction, Guarded {
     function _encodeState(int24 lastTickLower) internal pure returns (bytes32 ldfState) {
         // | initialized - 1 byte | lastTickLower - 3 bytes |
         ldfState = bytes32(bytes4(INITIALIZED_STATE + uint32(uint24(lastTickLower))));
+    }
+
+    function _enforceUniformShiftMode(
+        int24 tickLower,
+        int24 tickUpper,
+        ShiftMode shiftMode,
+        int24 lastMinTick,
+        int24 tickSpacing
+    ) internal pure returns (int24 tickLowerEnforced, int24 tickUpperEnforced) {
+        int24 tickLength = tickUpper - tickLower;
+        (int24 minUsableTick, int24 maxUsableTick) =
+            (TickMath.minUsableTick(tickSpacing), TickMath.maxUsableTick(tickSpacing));
+        tickLowerEnforced =
+            int24(FixedPointMathLib.max(minUsableTick, enforceShiftMode(tickLower, lastMinTick, shiftMode)));
+        tickUpperEnforced = int24(FixedPointMathLib.min(maxUsableTick, tickLowerEnforced + tickLength));
     }
 }
