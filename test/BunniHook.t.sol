@@ -7,6 +7,7 @@ import {IAmAmm} from "biddog/interfaces/IAmAmm.sol";
 
 import "./BaseTest.sol";
 import {BunniStateLibrary} from "../src/lib/BunniStateLibrary.sol";
+import {CuratedDistribution, DistributionType} from "../src/ldf/managed/CuratedDistribution.sol";
 
 contract BunniHookTest is BaseTest {
     using TickMath for *;
@@ -2120,5 +2121,263 @@ contract BunniHookTest is BaseTest {
         assertEq(feeRate__, feeRate, "fee rate should be set");
         assertEq(accruedFee0, 0, "accrued fee 0 should be 0");
         assertEq(accruedFee1, 0, "accrued fee 1 should be 0");
+    }
+
+    function test_curatedDistributionLdfPoC() external {
+        bytes32 ldfParams = bytes32(
+            abi.encodePacked(
+                ShiftMode.BOTH,
+                int24(-10),
+                uint16(5),
+                uint32(1.1e8),
+                uint32(1e6),
+                bytes14(0),
+                uint24(TWAP_SECONDS_AGO),
+                DistributionType.CARPETED_GEOMETRIC
+            )
+        );
+
+        ILiquidityDensityFunction curatedLdf =
+            new CuratedDistribution(address(hub), address(bunniHook), address(quoter));
+
+        (, PoolKey memory key) = _deployPoolAndInitLiquidity(
+            Currency.wrap(address(token0)),
+            Currency.wrap(address(token1)),
+            vault0,
+            vault1,
+            curatedLdf,
+            ldfParams,
+            TWAP_SECONDS_AGO
+        );
+
+        // execute first swap
+        uint256 swapAmount = 1 ether;
+        (Currency firstSwapInputToken, Currency firstSwapOutputToken) = (key.currency0, key.currency1);
+        _mint(firstSwapInputToken, address(this), swapAmount * 2);
+        IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
+            zeroForOne: true,
+            amountSpecified: -int256(swapAmount),
+            sqrtPriceLimitX96: TickMath.getSqrtPriceAtTick(-8)
+        });
+        uint256 firstSwapInputAmount;
+        uint256 firstSwapOutputAmount;
+        {
+            uint256 beforeInputTokenBalance = firstSwapInputToken.balanceOfSelf();
+            uint256 beforeOutputTokenBalance = firstSwapOutputToken.balanceOfSelf();
+            console2.log("first swap");
+            _swap(key, params, 0, "");
+            firstSwapInputAmount = beforeInputTokenBalance - firstSwapInputToken.balanceOfSelf();
+            firstSwapOutputAmount = firstSwapOutputToken.balanceOfSelf() - beforeOutputTokenBalance;
+        }
+
+        IdleBalance idleBalanceBefore = hub.idleBalance(key.toId());
+        (uint256 idleAmountBefore, bool isToken0Before) = IdleBalanceLibrary.fromIdleBalance(idleBalanceBefore);
+        console2.log("idleAmountBefore: %s", idleAmountBefore);
+        console2.log("isToken0Before: %s", isToken0Before);
+
+        // bytes28 newBaseParams = bytes28(
+        //     abi.encodePacked(
+        //         ShiftMode.BOTH,
+        //         int24(-10),
+        //         uint16(5),
+        //         uint32(1.1e8),
+        //         uint32(1e6),
+        //         bytes14("12345678912345")
+        //     )
+        // );
+
+        bytes28 newBaseParams = bytes28(abi.encodePacked(ShiftMode.BOTH, int24(0), int24(10), bytes21(0)));
+
+        // set new params
+        // CuratedDistribution(address(curatedLdf)).setLdfParams(key, DistributionType.CARPETED_GEOMETRIC, newBaseParams);
+        CuratedDistribution(address(curatedLdf)).setLdfParams(
+            key, DistributionType.UNIFORM, newBaseParams, TWAP_SECONDS_AGO
+        );
+        console2.log("set new LDF params");
+
+        skip(1e9 days);
+
+        // execute second swap
+        // one-for-zero exact input swap
+        bool zeroForOne = false;
+        int256 secondSwapAmount = -int256(firstSwapOutputAmount);
+        Currency currencyIn = Currency.wrap(address(token1));
+        Currency currencyOut = Currency.wrap(address(token0));
+        address currencyInRaw = address(token1);
+        address currencyOutRaw = address(token0);
+
+        params = IPoolManager.SwapParams({
+            zeroForOne: zeroForOne,
+            amountSpecified: secondSwapAmount,
+            sqrtPriceLimitX96: zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
+        });
+        uint256 secondSwapInputAmount;
+        uint256 secondSwapOutputAmount;
+        {
+            uint256 beforeInputTokenBalance = firstSwapOutputToken.balanceOfSelf();
+            uint256 beforeOutputTokenBalance = firstSwapInputToken.balanceOfSelf();
+            console2.log("second swap");
+            vm.recordLogs();
+            _swap(key, params, 0, "");
+            secondSwapInputAmount = beforeInputTokenBalance - firstSwapOutputToken.balanceOfSelf();
+            secondSwapOutputAmount = firstSwapInputToken.balanceOfSelf() - beforeOutputTokenBalance;
+        }
+
+        // verify no profits
+        assertLeDecimal(secondSwapOutputAmount, firstSwapInputAmount, 18, "arb has profit");
+
+        IdleBalance idleBalanceAfter = hub.idleBalance(key.toId());
+        (uint256 idleAmountAfter, bool isToken0After) = IdleBalanceLibrary.fromIdleBalance(idleBalanceAfter);
+
+        console2.log("idleAmountAfter: %s", idleAmountAfter);
+        console2.log("isToken0After: %s", isToken0After);
+
+        {
+            (, uint256 idleBalance, bool willReb0_pre, bool shouldReb_pre,,,) = quoter.getExcessLiquidity(key);
+            console2.log(
+                "post-swap quoter: idleBalance=%s, willRebalanceToken0=%s, shouldRebalance=%s",
+                idleBalance,
+                willReb0_pre,
+                shouldReb_pre
+            );
+        }
+
+        // ---------
+
+        // validate etched order
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        Vm.Log memory orderEtchedLog;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].emitter == address(floodPlain) && logs[i].topics[0] == IOnChainOrders.OrderEtched.selector) {
+                orderEtchedLog = logs[i];
+                break;
+            }
+        }
+
+        if (orderEtchedLog.emitter == address(0)) {
+            console.log("no rebalance order found, returning...");
+            return;
+        }
+
+        assertEq(orderEtchedLog.emitter, address(floodPlain), "emitter not floodPlain");
+        assertEq(orderEtchedLog.topics[0], IOnChainOrders.OrderEtched.selector, "not OrderEtched event");
+        IFloodPlain.SignedOrder memory signedOrder = abi.decode(orderEtchedLog.data, (IFloodPlain.SignedOrder));
+        IFloodPlain.Order memory order = signedOrder.order;
+        (, bytes32 permit2Hash) = _hashFloodOrder(order);
+        assertEq(
+            bunniHook.isValidSignature(permit2Hash, abi.encode(key.toId())),
+            IERC1271.isValidSignature.selector,
+            "order signature not valid"
+        );
+        assertEq(order.offerer, address(bunniHook), "offerer not bunniHook");
+        assertEq(order.recipient, address(bunniHook), "recipient not bunniHook");
+
+        assertEq(order.offer[0].token, Currency.unwrap(currencyIn), "offer token incorrect");
+        assertEq(order.consideration.token, Currency.unwrap(currencyOut), "consideration token incorrect");
+        assertEq(order.deadline, vm.getBlockTimestamp() + REBALANCE_ORDER_TTL, "deadline incorrect");
+        assertEq(order.preHooks[0].target, address(bunniHook), "preHook target not bunniHook");
+        IBunniHook.RebalanceOrderHookArgs memory expectedHookArgs = IBunniHook.RebalanceOrderHookArgs({
+            key: key,
+            preHookArgs: IBunniHook.RebalanceOrderPreHookArgs({currency: currencyIn, amount: order.offer[0].amount}),
+            postHookArgs: IBunniHook.RebalanceOrderPostHookArgs({currency: currencyOut})
+        });
+        assertEq(
+            order.preHooks[0].data,
+            abi.encodeCall(IBunniHook.rebalanceOrderHook, (true, expectedHookArgs)),
+            "preHook data incorrect"
+        );
+        assertEq(order.postHooks[0].target, address(bunniHook), "postHook target not bunniHook");
+        assertEq(
+            order.postHooks[0].data,
+            abi.encodeCall(IBunniHook.rebalanceOrderHook, (false, expectedHookArgs)),
+            "postHook data incorrect"
+        );
+        assertEq(signedOrder.signature, abi.encode(key.toId()), "signature incorrect");
+
+        console2.log(
+            "rebalance order: offerAmount=%s, considerationAmount=%s", order.offer[0].amount, order.consideration.amount
+        );
+
+        /*
+    uint256 orderPrice = order.consideration.amount.mulDiv(Q96, order.offer[0].amount);
+    int24 twapTick = 4;
+    uint256 expectedOrderPrice = zeroForOne
+        ? uint256(twapTick.getSqrtPriceAtTick()).fullMulX96(twapTick.getSqrtPriceAtTick())
+        : uint256((-twapTick).getSqrtPriceAtTick()).fullMulX96((-twapTick).getSqrtPriceAtTick());
+    expectedOrderPrice =
+        expectedOrderPrice.mulDiv(REBALANCE_MAX_SLIPPAGE_BASE - REBALANCE_MAX_SLIPPAGE, REBALANCE_MAX_SLIPPAGE_BASE);
+    assertApproxEqRel(orderPrice, expectedOrderPrice, 1e3, "order price incorrect");
+        */
+
+        // fulfill order
+        _mint(Currency.wrap(order.consideration.token), address(this), order.consideration.amount);
+        (uint256 beforeBalance0, uint256 beforeBalance1) = hub.poolBalances(key.toId());
+        uint256 beforeFulfillerBalance = Currency.wrap(order.consideration.token).balanceOfSelf();
+        {
+            (,, bool willRebToken0,,,,) = quoter.getExcessLiquidity(key);
+            address expectedOffer = Currency.unwrap(willRebToken0 ? key.currency0 : key.currency1);
+            assertEq(order.offer[0].token, expectedOffer, "order side mismatch vs willRebalanceToken0");
+        }
+        console2.log("fulfilling rebalance order...");
+        floodPlain.fulfillOrder(signedOrder);
+        (uint256 afterBalance0, uint256 afterBalance1) = hub.poolBalances(key.toId());
+
+        // verify balances
+        uint256 afterFulfillerBalance = Currency.wrap(order.consideration.token).balanceOfSelf();
+        assertGe(beforeFulfillerBalance, afterFulfillerBalance, "fulfiller balance grew (wrong side?)");
+        assertEq(
+            beforeFulfillerBalance - afterFulfillerBalance,
+            order.consideration.amount,
+            "didn't take consideration currency from fulfiller"
+        );
+
+        bool offerIsToken0 = order.offer[0].token == Currency.unwrap(key.currency0);
+
+        uint256 beforeBalanceIn = offerIsToken0 ? beforeBalance0 : beforeBalance1;
+        uint256 afterBalanceIn = offerIsToken0 ? afterBalance0 : afterBalance1;
+
+        uint256 beforeBalanceOut = offerIsToken0 ? beforeBalance1 : beforeBalance0;
+        uint256 afterBalanceOut = offerIsToken0 ? afterBalance1 : afterBalance0;
+
+        assertGe(beforeBalanceIn, afterBalanceIn, "in-balance did not decrease");
+        assertGe(afterBalanceOut, beforeBalanceOut, "out-balance did not increase");
+
+        assertApproxEqAbs(
+            beforeBalanceIn - afterBalanceIn, order.offer[0].amount, 10, "offer tokens taken from hub incorrect"
+        );
+
+        assertApproxEqAbs(
+            afterBalanceOut - beforeBalanceOut,
+            order.consideration.amount,
+            10,
+            "consideration tokens given to hub incorrect"
+        );
+
+        {
+            // verify excess liquidity after the rebalance
+            (
+                uint256 totalLiquidity,
+                uint256 idleBalanceAfterRebalance,
+                bool willRebalanceToken0,
+                bool shouldRebalance,
+                ,
+                ,
+            ) = quoter.getExcessLiquidity(key);
+            console2.log("idleBalanceAfterRebalance: %s", idleBalanceAfterRebalance);
+            console2.log("willRebalanceToken0: %s", willRebalanceToken0);
+            if (willRebalanceToken0 == isToken0After) {
+                console2.log("rebalance should have decreased idle balance in the same token");
+                assertLt(idleBalanceAfterRebalance, idleAmountAfter, "idleBalanceAfterRebalance not less than before");
+            } else {
+                console2.log("rebalance created too much idle balance in the opposite direction");
+            }
+            assertFalse(shouldRebalance, "shouldRebalance is still true after rebalance"); // TODO: currently failing
+            assertEq(totalLiquidity, quoter.getTotalLiquidity(key), "totalLiquidity incorrect");
+        }
+
+        // verify surge fee is applied
+        (,, uint32 lastSwapTimestamp, uint32 lastSurgeTimestamp) = bunniHook.slot0s(key.toId());
+        assertEq(lastSwapTimestamp, uint32(vm.getBlockTimestamp()), "lastSwapTimestamp incorrect");
+        assertEq(lastSurgeTimestamp, uint32(vm.getBlockTimestamp()), "lastSurgeTimestamp incorrect");
     }
 }

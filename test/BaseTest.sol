@@ -563,61 +563,67 @@ abstract contract BaseTest is Test, Permit2Deployer, FloodDeployer {
         ERC4626 vault0_,
         ERC4626 vault1_,
         ILiquidityDensityFunction ldf_,
+        bytes32 ldfParams,
+        uint24 twapSecondsAgo
+    ) internal returns (IBunniToken bunniToken, PoolKey memory key) {
+        return _deployPoolAndInitLiquidity(
+            currency0,
+            currency1,
+            vault0_,
+            vault1_,
+            1e18,
+            1e18,
+            ldf_,
+            IHooklet(address(0)),
+            ldfParams,
+            abi.encodePacked(
+                FEE_MIN,
+                FEE_MAX,
+                FEE_QUADRATIC_MULTIPLIER,
+                FEE_TWAP_SECONDS_AGO,
+                POOL_MAX_AMAMM_FEE,
+                SURGE_HALFLIFE,
+                SURGE_AUTOSTART_TIME,
+                VAULT_SURGE_THRESHOLD_0,
+                VAULT_SURGE_THRESHOLD_1,
+                REBALANCE_THRESHOLD,
+                REBALANCE_MAX_SLIPPAGE,
+                REBALANCE_TWAP_SECONDS_AGO,
+                REBALANCE_ORDER_TTL,
+                true, // amAmmEnabled
+                ORACLE_MIN_INTERVAL,
+                MIN_RENT_MULTIPLIER
+            ),
+            bytes32(0),
+            twapSecondsAgo
+        );
+    }
+
+    function _deployPoolAndInitLiquidity(
+        Currency currency0,
+        Currency currency1,
+        ERC4626 vault0_,
+        ERC4626 vault1_,
+        ILiquidityDensityFunction ldf_,
         IHooklet hooklet,
         bytes32 ldfParams,
         bytes memory hookParams,
         bytes32 salt
     ) internal returns (IBunniToken bunniToken, PoolKey memory key) {
-        // initialize bunni
-        (bunniToken, key) = hub.deployBunniToken(
-            IBunniHub.DeployBunniTokenParams({
-                currency0: currency0,
-                currency1: currency1,
-                tickSpacing: TICK_SPACING,
-                twapSecondsAgo: TWAP_SECONDS_AGO,
-                liquidityDensityFunction: ldf_,
-                hooklet: hooklet,
-                ldfType: LDFType.DYNAMIC_AND_STATEFUL,
-                ldfParams: ldfParams,
-                hooks: bunniHook,
-                hookParams: hookParams,
-                vault0: vault0_,
-                vault1: vault1_,
-                minRawTokenRatio0: 0.08e6,
-                targetRawTokenRatio0: 0.1e6,
-                maxRawTokenRatio0: 0.12e6,
-                minRawTokenRatio1: 0.08e6,
-                targetRawTokenRatio1: 0.1e6,
-                maxRawTokenRatio1: 0.12e6,
-                sqrtPriceX96: TickMath.getSqrtPriceAtTick(4),
-                name: bytes32("BunniToken"),
-                symbol: bytes32("BUNNI-LP"),
-                owner: address(this),
-                metadataURI: "metadataURI",
-                salt: salt
-            })
+        return _deployPoolAndInitLiquidity(
+            currency0,
+            currency1,
+            vault0_,
+            vault1_,
+            1e18,
+            1e18,
+            ldf_,
+            hooklet,
+            ldfParams,
+            hookParams,
+            salt,
+            TWAP_SECONDS_AGO
         );
-
-        // make initial deposit to avoid accounting for MIN_INITIAL_SHARES
-        uint256 depositAmount0 = PRECISION;
-        uint256 depositAmount1 = PRECISION;
-        vm.startPrank(address(0x6969));
-        token0.approve(address(PERMIT2), type(uint256).max);
-        token1.approve(address(PERMIT2), type(uint256).max);
-        weth.approve(address(PERMIT2), type(uint256).max);
-        PERMIT2.approve(address(token0), address(hub), type(uint160).max, type(uint48).max);
-        PERMIT2.approve(address(token1), address(hub), type(uint160).max, type(uint48).max);
-        PERMIT2.approve(address(weth), address(hub), type(uint160).max, type(uint48).max);
-        vm.stopPrank();
-        uint256 vaultFee0 = (
-            address(vault0_) == address(vault0WithFee) || address(vault0_) == address(vault1WithFee)
-                || address(vault0_) == address(vaultWethWithFee)
-        ) ? VAULT_FEE : (address(vault0_) == address(vault0TakeLess) ? 0.5e18 : 0);
-        uint256 vaultFee1 = (
-            address(vault1_) == address(vault0WithFee) || address(vault1_) == address(vault1WithFee)
-                || address(vault1_) == address(vaultWethWithFee)
-        ) ? VAULT_FEE : 0;
-        _makeDepositWithFee(key, depositAmount0, depositAmount1, address(0x6969), vaultFee0, vaultFee1, "");
     }
 
     function _deployPoolAndInitLiquidity(
@@ -633,13 +639,43 @@ abstract contract BaseTest is Test, Permit2Deployer, FloodDeployer {
         bytes memory hookParams,
         bytes32 salt
     ) internal returns (IBunniToken bunniToken, PoolKey memory key) {
+        return _deployPoolAndInitLiquidity(
+            currency0,
+            currency1,
+            vault0_,
+            vault1_,
+            depositAmount0,
+            depositAmount1,
+            ldf_,
+            hooklet,
+            ldfParams,
+            hookParams,
+            salt,
+            TWAP_SECONDS_AGO
+        );
+    }
+
+    function _deployPoolAndInitLiquidity(
+        Currency currency0,
+        Currency currency1,
+        ERC4626 vault0_,
+        ERC4626 vault1_,
+        uint256 depositAmount0,
+        uint256 depositAmount1,
+        ILiquidityDensityFunction ldf_,
+        IHooklet hooklet,
+        bytes32 ldfParams,
+        bytes memory hookParams,
+        bytes32 salt,
+        uint24 twapSecondsAgo
+    ) internal returns (IBunniToken bunniToken, PoolKey memory key) {
         // initialize bunni
         (bunniToken, key) = hub.deployBunniToken(
             IBunniHub.DeployBunniTokenParams({
                 currency0: currency0,
                 currency1: currency1,
                 tickSpacing: TICK_SPACING,
-                twapSecondsAgo: TWAP_SECONDS_AGO,
+                twapSecondsAgo: twapSecondsAgo,
                 liquidityDensityFunction: ldf_,
                 hooklet: hooklet,
                 ldfType: LDFType.DYNAMIC_AND_STATEFUL,
