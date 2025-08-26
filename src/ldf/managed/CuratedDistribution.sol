@@ -451,11 +451,6 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
         override
         returns (bool)
     {
-        // force the twapSecondsAgo in hookParams to 0 because this LDF will override it
-        if (twapSecondsAgo != 0) {
-            return false;
-        }
-
         return _isValidParams(key, ldfParams, ldfType);
     }
 
