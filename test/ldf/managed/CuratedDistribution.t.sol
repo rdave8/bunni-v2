@@ -39,6 +39,14 @@ contract CuratedDistributionHarness is CuratedDistribution {
     function sanitizeBaseLdfParams(DistributionType distro, bytes28 baseLdfParams) external pure returns (bytes28) {
         return _sanitizeBaseLdfParams(distro, baseLdfParams);
     }
+
+    function encodeState(int24 lastTwapTick, DistributionType lastDistributionType, bytes28 lastBaseLdfParams)
+        external
+        pure
+        returns (bytes32)
+    {
+        return _encodeState(lastTwapTick, lastDistributionType, lastBaseLdfParams);
+    }
 }
 
 contract CuratedDistributionTest is BaseTest {
@@ -668,7 +676,7 @@ contract CuratedDistributionTest is BaseTest {
         vm.prank(address(hub));
         (uint256 liquidityDensityX96,,,,) = curatedLdf.query({
             key: key,
-            roundedTick: 0,
+            roundedTick: -10,
             twapTick: 0,
             spotPriceTick: 0,
             ldfParams: _createDefaultParams(),
@@ -711,15 +719,15 @@ contract CuratedDistributionTest is BaseTest {
         vm.prank(address(hub));
         (uint256 liquidityDensityX96,,,,) = curatedLdf.query({
             key: key,
-            roundedTick: 0,
+            roundedTick: -10,
             twapTick: 0,
             spotPriceTick: 0,
             ldfParams: _createDefaultParams(),
             ldfState: state
         });
 
-        // liquidityDensity should equal Q96 * 1.2 / (1 + 1.2)
-        assertApproxEqRel(liquidityDensityX96, Q96 * 12 / 22, 1e6, "Liquidity density mismatch");
+        // liquidityDensity should equal Q96 * 1 / (1 + 1.2)
+        assertApproxEqRel(liquidityDensityX96, Q96 * 10 / 22, 1e6, "Liquidity density mismatch");
     }
 
     function test_ldfStateShouldClearAfterParamUpdate_doubleGeometric() public {
@@ -776,7 +784,7 @@ contract CuratedDistributionTest is BaseTest {
         vm.prank(address(hub));
         (uint256 liquidityDensityX96,,,,) = curatedLdf.query({
             key: key,
-            roundedTick: 0,
+            roundedTick: -10,
             twapTick: 0,
             spotPriceTick: 0,
             ldfParams: _createDefaultParams(),
@@ -785,6 +793,59 @@ contract CuratedDistributionTest is BaseTest {
 
         // liquidityDensity should equal Q96 / 2
         assertApproxEqRel(liquidityDensityX96, Q96 / 2, 1e6, "Liquidity density mismatch");
+    }
+
+    function test_ldfStateShouldNotClearAfterShapeUpdate() public {
+        // construct initial params
+        // uniform with range [-10, 30] and RIGHT shift mode
+        // TWAP is 0 initially
+        // offset is -20 and lastMinTick is -10, so that the state enforces the RIGHT shift mode
+        // and uses -10 as the min tick instead of -20 which the twap suggests.
+        bytes28 baseParams = bytes28(abi.encodePacked(ShiftMode.RIGHT, int24(-20), int24(4)));
+        bytes32 initialState = curatedLdf.encodeState(-10, DistributionType.UNIFORM, baseParams);
+
+        // set initial params
+        curatedLdf.setLdfParams(key, DistributionType.UNIFORM, baseParams, 15 minutes);
+
+        // construct new params
+        // geometric with range [-10, 30] and RIGHT shift mode
+        // same offset of -20, so that if the state is preserved the range should be [-10, 30]
+        // and if the state was cleared then the range would be [-20, 20]
+        bytes28 newBaseParams =
+            bytes28(abi.encodePacked(ShiftMode.RIGHT, int24(-20), int16(4), uint32(1.2e8), uint32(1e9)));
+
+        // set new params
+        curatedLdf.setLdfParams(key, DistributionType.CARPETED_GEOMETRIC, newBaseParams, 15 minutes);
+
+        // query LDF at -20
+        vm.prank(address(hub));
+        (uint256 liquidityDensityX96,,,,) = curatedLdf.query({
+            key: key,
+            roundedTick: -20,
+            twapTick: 0,
+            spotPriceTick: 0,
+            ldfParams: _createDefaultParams(),
+            ldfState: initialState
+        });
+
+        // liquidityDensity should equal 446481614619692 (the carpet liquidity amount) if the state was preserved
+        assertEq(liquidityDensityX96, 446481614619692, "Liquidity density mismatch at -20");
+
+        // query LDF at -10
+        vm.prank(address(hub));
+        (liquidityDensityX96,,,,) = curatedLdf.query({
+            key: key,
+            roundedTick: -10,
+            twapTick: 0,
+            spotPriceTick: 0,
+            ldfParams: _createDefaultParams(),
+            ldfState: initialState
+        });
+
+        // liquidityDensity should equal Q96 * (1-1e-9)  * 1 / (1 + 1.2 + 1.2^2 + 1.2^3) if the state was preserved
+        assertApproxEqRel(
+            liquidityDensityX96, Q96 * (1e18 - 1e9) / 1e18 * 1000 / 5368, 1e6, "Liquidity density mismatch at -10"
+        );
     }
 
     function test_revert_spotPriceTickHasLowLiquidity() public {
