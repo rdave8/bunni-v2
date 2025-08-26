@@ -507,7 +507,10 @@ contract BunniQuoter is IBunniQuoter {
         );
 
         // compute total liquidity at spot price
-        (totalLiquidity,,,,,,,) = queryLDF({
+        uint256 activeBalance0;
+        uint256 activeBalance1;
+        bool shouldSurge;
+        (totalLiquidity,,,, activeBalance0, activeBalance1,, shouldSurge) = queryLDF({
             key: key,
             sqrtPriceX96: updatedSqrtPriceX96,
             tick: updatedTick,
@@ -520,7 +523,14 @@ contract BunniQuoter is IBunniQuoter {
             idleBalance: bunniState.idleBalance
         });
 
-        (idleBalance, willRebalanceToken0) = bunniState.idleBalance.fromIdleBalance();
+        if (shouldSurge) {
+            // recompute idle balance, which is what BunniHookLogic would do
+            (idleBalance, willRebalanceToken0) = IdleBalanceLibrary.computeIdleBalance(
+                activeBalance0, activeBalance1, balance0, balance1
+            ).fromIdleBalance();
+        } else {
+            (idleBalance, willRebalanceToken0) = bunniState.idleBalance.fromIdleBalance();
+        }
 
         // compute target token densities of the excess liquidity after rebalancing
         // this is done by querying the LDF using a TWAP as the spot price to prevent manipulation
@@ -557,10 +567,18 @@ contract BunniQuoter is IBunniQuoter {
             // zero for one
             uint256 rebalanceSpotPriceInvSqrtRatioX96 = TickMath.getSqrtPriceAtTick(-arithmeticMeanTick);
             p = rebalanceSpotPriceInvSqrtRatioX96.fullMulX96(rebalanceSpotPriceInvSqrtRatioX96);
+            if (totalDensity1X96 == 0) {
+                // should never happen
+                return (totalLiquidity, idleBalance, willRebalanceToken0, false, thresholdBalance, 0, 0);
+            }
             r = totalDensity0X96.fullMulDiv(Q96, totalDensity1X96);
         } else {
             // one for zero
             p = rebalanceSpotPriceSqrtRatioX96.fullMulX96(rebalanceSpotPriceSqrtRatioX96);
+            if (totalDensity0X96 == 0) {
+                // should never happen
+                return (totalLiquidity, idleBalance, willRebalanceToken0, false, thresholdBalance, 0, 0);
+            }
             r = totalDensity1X96.fullMulDiv(Q96, totalDensity0X96);
         }
 
