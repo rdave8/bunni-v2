@@ -648,19 +648,9 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
         (bool initialized, int24 lastMinTick, DistributionType lastDistributionType, bytes28 lastBaseLdfParams) =
             _decodeState(ldfState);
         if (initialized) {
-            // should surge if param was updated
-            // if param was updated, the ldfState should be cleared since state for the previous config
-            // may affect the new config unnecessarily
-            // for example, if the previous LDF was uniform with range [0, 10] and STATIC shift mode and the new
-            // config is uniform with range [-100, -90] and RIGHT shift mode, if the state wasn't cleared then
-            // the LDF will still be [0, 10] when it should really be [-100, -90].
-            if (
-                lastDistributionType != distro
-                    || _sanitizeBaseLdfParams(lastDistributionType, lastBaseLdfParams)
-                        != _sanitizeBaseLdfParams(distro, baseLdfParams)
-            ) {
-                initialized = false; // this tells the later logic to ignore the state
-            }
+            (, initialized) = _checkLdfParamDiff(
+                lastDistributionType, lastBaseLdfParams, distro, baseLdfParams, twapTick, key.tickSpacing
+            );
         }
 
         // compute results based on distribution type
