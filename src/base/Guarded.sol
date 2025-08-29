@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import {CustomRevert} from "@uniswap/v4-core/src/libraries/CustomRevert.sol";
-
 abstract contract Guarded {
-    using CustomRevert for bytes4;
-
     error GuardedCall();
 
     /// @dev The original address of this contract
@@ -16,11 +12,18 @@ abstract contract Guarded {
     address private immutable quoter;
 
     function _guardedCheck() private view {
-        if (
-            (msg.sender != hub && msg.sender != hook && msg.sender != quoter && msg.sender != address(0))
-                || address(this) != original
-        ) {
-            GuardedCall.selector.revertWith();
+        (address hub_, address hook_, address quoter_, address original_) = (hub, hook, quoter, original);
+        assembly ("memory-safe") {
+            // if (!((msg.sender == hub || msg.sender == hook || msg.sender == quoter || msg.sender == address(0)) && address(this) == original))
+            if iszero(
+                and(
+                    or(eq(caller(), hub_), or(eq(caller(), hook_), or(eq(caller(), quoter_), iszero(caller())))),
+                    eq(address(), original_)
+                )
+            ) {
+                mstore(0, 0xd9711eeb) // `GuardedCall()`
+                revert(0, 0x04)
+            }
         }
     }
 

@@ -16,7 +16,6 @@ import {IPermit2} from "permit2/src/interfaces/IPermit2.sol";
 import {IERC1271} from "permit2/src/interfaces/IERC1271.sol";
 
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
-import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
@@ -58,12 +57,13 @@ import {OrderHashMemory} from "../src/lib/OrderHashMemory.sol";
 import {ReentrancyGuard} from "../src/base/ReentrancyGuard.sol";
 import {ERC4626WithFeeMock} from "./mocks/ERC4626WithFeeMock.sol";
 import {ERC4626TakeLessMock} from "./mocks/ERC4626TakeLessMock.sol";
+import {PoolManagerDeployer} from "./utils/PoolManagerDeployer.sol";
 import {GeometricDistribution} from "../src/ldf/GeometricDistribution.sol";
 import {DoubleGeometricDistribution} from "../src/ldf/DoubleGeometricDistribution.sol";
 import {ERC4626Mock, MaliciousERC4626, ERC4626FeeMock} from "./mocks/ERC4626Mock.sol";
 import {ILiquidityDensityFunction} from "../src/interfaces/ILiquidityDensityFunction.sol";
 
-abstract contract BaseTest is Test, Permit2Deployer, FloodDeployer {
+abstract contract BaseTest is Test, Permit2Deployer, FloodDeployer, PoolManagerDeployer {
     using TickMath for *;
     using FullMathX96 for *;
     using SafeCastLib for *;
@@ -146,7 +146,7 @@ abstract contract BaseTest is Test, Permit2Deployer, FloodDeployer {
         if (address(token0) >= address(token1)) {
             (token0, token1) = (token1, token0);
         }
-        poolManager = new PoolManager(address(this));
+        poolManager = _deployPoolManager();
 
         // deploy vaults
         vault0 = new ERC4626Mock(token0);

@@ -17,7 +17,6 @@ import {queryTwap} from "../../lib/QueryTWAP.sol";
 import {roundTickSingle} from "../../lib/Math.sol";
 import {IBunniHub} from "../../interfaces/IBunniHub.sol";
 import {IBunniHook} from "../../interfaces/IBunniHook.sol";
-import {BunniStateLibrary} from "../../lib/BunniStateLibrary.sol";
 import {LibUniformDistribution} from "../LibUniformDistribution.sol";
 import {LibGeometricDistribution} from "../LibGeometricDistribution.sol";
 import {LibDoubleGeometricDistribution} from "../LibDoubleGeometricDistribution.sol";
@@ -38,13 +37,11 @@ enum DistributionType {
 /// @dev The baseLdfParams of each base LDF cannot exceed 28 bytes. This is satisfied since the max
 /// is 28 bytes which is used by the carpeted double geometric LDF.
 contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
-    using BunniStateLibrary for IBunniHook;
-
     mapping(PoolId => bytes32) public ldfParamsOverride;
 
     /// @dev Minimum LDF density at the spot price after updating ldfParams. Prevents the curator
     /// from extracting value by shifting the liquidity out-of-range.
-    uint256 internal constant MIN_LIQ_DENSITY_X96 = Q96 / 1000; // 0.1%
+    uint256 internal constant MIN_LIQ_DENSITY_X96 = 79228162514264337593543950; // equals Q96 / 1000, represents 0.1%
 
     bytes32 internal constant BASE_LDF_PARAMS_MASK = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000;
 
@@ -55,16 +52,11 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
     bytes28 internal constant DOUBLE_GEOMETRIC_LDF_PARAMS_MASK =
         0x00ffffffffffffffffffffffffffffffffffffffffffffffffffffff;
 
-    event SetLdfParamsOverride(
-        PoolId indexed id,
-        DistributionType indexed distributionType,
-        bytes32 indexed baseLdfParams,
-        uint24 twapSecondsAgo
-    );
+    event SetLdfParamsOverride(PoolId indexed id, bytes32 indexed newLdfParams);
 
     error Unauthorized();
     error InvalidLdfParams();
-    error LiquidityDensityAtSpotPriceTooLow(uint256 liquidityDensityX96_);
+    error LiquidityDensityAtSpotPriceTooLow();
 
     constructor(address hub_, address hook_, address quoter_) Guarded(hub_, hook_, quoter_) {}
 
@@ -91,8 +83,14 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
     {
         // override ldf params if needed
         PoolId id = key.toId();
-        bytes32 ldfParamsOverride_ = ldfParamsOverride[id];
-        ldfParams = ldfParamsOverride_ == bytes32(0) ? ldfParams : ldfParamsOverride_;
+        {
+            bytes32 ldfParamsOverride_ = ldfParamsOverride[id];
+            assembly ("memory-safe") {
+                // ldfParams = ldfParamsOverride_ != 0 ? ldfParamsOverride_ : ldfParams;
+                ldfParams :=
+                    xor(ldfParamsOverride_, mul(xor(ldfParamsOverride_, ldfParams), iszero(ldfParamsOverride_)))
+            }
+        }
 
         // decode ldf params and check surge
         (DistributionType distro, uint24 twapSecondsAgo, bytes28 baseLdfParams) = _decodeLdfParams(ldfParams);
@@ -189,8 +187,14 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
     {
         // override ldf params if needed
         PoolId id = key.toId();
-        bytes32 ldfParamsOverride_ = ldfParamsOverride[id];
-        ldfParams = ldfParamsOverride_ == bytes32(0) ? ldfParams : ldfParamsOverride_;
+        {
+            bytes32 ldfParamsOverride_ = ldfParamsOverride[id];
+            assembly ("memory-safe") {
+                // ldfParams = ldfParamsOverride_ != 0 ? ldfParamsOverride_ : ldfParams;
+                ldfParams :=
+                    xor(ldfParamsOverride_, mul(xor(ldfParamsOverride_, ldfParams), iszero(ldfParamsOverride_)))
+            }
+        }
 
         // decode ldf params
         (DistributionType distro, uint24 twapSecondsAgo, bytes28 baseLdfParams) = _decodeLdfParams(ldfParams);
@@ -272,8 +276,14 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
     ) external view override guarded returns (uint256) {
         // override ldf params if needed
         PoolId id = key.toId();
-        bytes32 ldfParamsOverride_ = ldfParamsOverride[id];
-        ldfParams = ldfParamsOverride_ == bytes32(0) ? ldfParams : ldfParamsOverride_;
+        {
+            bytes32 ldfParamsOverride_ = ldfParamsOverride[id];
+            assembly ("memory-safe") {
+                // ldfParams = ldfParamsOverride_ != 0 ? ldfParamsOverride_ : ldfParams;
+                ldfParams :=
+                    xor(ldfParamsOverride_, mul(xor(ldfParamsOverride_, ldfParams), iszero(ldfParamsOverride_)))
+            }
+        }
 
         // decode ldf params
         (DistributionType distro, uint24 twapSecondsAgo, bytes28 baseLdfParams) = _decodeLdfParams(ldfParams);
@@ -345,8 +355,14 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
     ) external view override guarded returns (uint256) {
         // override ldf params if needed
         PoolId id = key.toId();
-        bytes32 ldfParamsOverride_ = ldfParamsOverride[id];
-        ldfParams = ldfParamsOverride_ == bytes32(0) ? ldfParams : ldfParamsOverride_;
+        {
+            bytes32 ldfParamsOverride_ = ldfParamsOverride[id];
+            assembly ("memory-safe") {
+                // ldfParams = ldfParamsOverride_ != 0 ? ldfParamsOverride_ : ldfParams;
+                ldfParams :=
+                    xor(ldfParamsOverride_, mul(xor(ldfParamsOverride_, ldfParams), iszero(ldfParamsOverride_)))
+            }
+        }
 
         // decode ldf params
         (DistributionType distro, uint24 twapSecondsAgo, bytes28 baseLdfParams) = _decodeLdfParams(ldfParams);
@@ -429,10 +445,16 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
     ) external {
         // can only be called by BunniToken owner
         PoolId id = key.toId();
-        IBunniHub hub_ = IBunniHub(hub);
-        address msgSender = LibMulticaller.senderOrSigner();
-        if (msgSender != hub_.bunniTokenOfPool(id).owner()) {
-            revert Unauthorized();
+        {
+            IBunniHub hub_ = IBunniHub(hub);
+            address msgSender = LibMulticaller.senderOrSigner();
+            address poolOwner = hub_.bunniTokenOfPool(id).owner();
+            assembly ("memory-safe") {
+                if iszero(eq(msgSender, poolOwner)) {
+                    mstore(0, 0x82b42900) // `Unauthorized()`.
+                    revert(0x1c, 0x04)
+                }
+            }
         }
 
         // ensure new params are valid
@@ -440,8 +462,11 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
         // distributionType is the last byte of ldfParams
         bytes32 ldfParams = bytes32(abi.encodePacked(baseLdfParams, twapSecondsAgo, distributionType));
         bool isValid = _isValidParams({key: key, ldfParams: ldfParams, ldfType: LDFType.DYNAMIC_AND_STATEFUL});
-        if (!isValid) {
-            revert InvalidLdfParams();
+        assembly ("memory-safe") {
+            if iszero(isValid) {
+                mstore(0, 0xdf270edf) // `InvalidLdfParams()`
+                revert(0x1c, 0x04)
+            }
         }
 
         // ensure the liquidity density at the spot price rick is at least MIN_LIQ_DENSITY_X96
@@ -449,7 +474,10 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
         (, int24 tick,,) = bunniHook.slot0s(id);
         int24 roundedTick = roundTickSingle(tick, key.tickSpacing);
         bytes32 ldfState = bunniHook.ldfStates(id);
-        int24 twapTick = twapSecondsAgo == 0 ? int24(0) : queryTwap(key, twapSecondsAgo);
+        int24 twapTick;
+        if (twapSecondsAgo != 0) {
+            twapTick = queryTwap(key, twapSecondsAgo);
+        }
         uint256 liquidityDensityX96_ = _liquidityDensity({
             key: key,
             roundedTick: roundedTick,
@@ -459,26 +487,16 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
             baseLdfParams: baseLdfParams,
             ldfState: ldfState
         });
-        if (liquidityDensityX96_ < MIN_LIQ_DENSITY_X96) {
-            revert LiquidityDensityAtSpotPriceTooLow(liquidityDensityX96_);
+        assembly ("memory-safe") {
+            if lt(liquidityDensityX96_, MIN_LIQ_DENSITY_X96) {
+                mstore(0, 0x0a9279f0) // `LiquidityDensityAtSpotPriceTooLow()`
+                revert(0x1c, 0x04)
+            }
         }
 
         // override ldf params
         ldfParamsOverride[id] = ldfParams;
-        emit SetLdfParamsOverride(id, distributionType, baseLdfParams, twapSecondsAgo);
-
-        // increase cardinalityNext if the current observations array is not big enough
-        bytes memory hookParams = hub_.hookParams(id);
-        bytes32 secondWord;
-        assembly ("memory-safe") {
-            secondWord := mload(add(hookParams, 64))
-        }
-        uint32 oracleMinInterval = uint32(bytes4(secondWord));
-        uint32 cardinalityNext = bunniHook.getCardinalityNext(id);
-        uint32 cardinalityNextTarget = (twapSecondsAgo + (oracleMinInterval >> 1)) / oracleMinInterval + 1; // round up + 1
-        if (cardinalityNextTarget > cardinalityNext) {
-            bunniHook.increaseCardinalityNext(key, cardinalityNextTarget);
-        }
+        emit SetLdfParamsOverride(id, ldfParams);
     }
 
     function _isValidParams(PoolKey calldata key, bytes32 ldfParams, LDFType ldfType) internal pure returns (bool) {
@@ -574,13 +592,26 @@ contract CuratedDistribution is ILiquidityDensityFunction, Guarded {
     }
 
     /// @dev Mask out irrelevant bytes when checking if the params are actually different.
-    function _sanitizeBaseLdfParams(DistributionType distro, bytes28 baseLdfParams) internal pure returns (bytes28) {
-        if (distro == DistributionType.UNIFORM) {
-            return baseLdfParams & UNIFORM_LDF_PARAMS_MASK;
-        } else if (distro == DistributionType.CARPETED_GEOMETRIC) {
-            return baseLdfParams & GEOMETRIC_LDF_PARAMS_MASK;
-        } else {
-            return baseLdfParams & DOUBLE_GEOMETRIC_LDF_PARAMS_MASK;
+    function _sanitizeBaseLdfParams(DistributionType distro, bytes28 baseLdfParams)
+        internal
+        pure
+        returns (bytes28 result)
+    {
+        // equivalent to:
+        // if (distro == DistributionType.UNIFORM) {
+        //     return baseLdfParams & UNIFORM_LDF_PARAMS_MASK;
+        // } else if (distro == DistributionType.CARPETED_GEOMETRIC) {
+        //     return baseLdfParams & GEOMETRIC_LDF_PARAMS_MASK;
+        // } else {
+        //     return baseLdfParams & DOUBLE_GEOMETRIC_LDF_PARAMS_MASK;
+        // }
+        assembly ("memory-safe") {
+            let mask
+            switch distro
+            case 1 { mask := UNIFORM_LDF_PARAMS_MASK }
+            case 2 { mask := GEOMETRIC_LDF_PARAMS_MASK }
+            default { mask := DOUBLE_GEOMETRIC_LDF_PARAMS_MASK }
+            result := and(baseLdfParams, mask)
         }
     }
 

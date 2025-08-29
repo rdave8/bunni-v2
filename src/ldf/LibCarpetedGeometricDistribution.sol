@@ -518,35 +518,6 @@ library LibCarpetedGeometricDistribution {
         }
     }
 
-    function getCarpetedLiquidity(
-        uint256 totalLiquidity,
-        int24 tickSpacing,
-        int24 minTick,
-        int24 length,
-        uint256 weightCarpet
-    )
-        internal
-        pure
-        returns (
-            uint256 leftCarpetLiquidity,
-            uint256 mainLiquidity,
-            uint256 rightCarpetLiquidity,
-            int24 minUsableTick,
-            int24 maxUsableTick
-        )
-    {
-        (minUsableTick, maxUsableTick) = (TickMath.minUsableTick(tickSpacing), TickMath.maxUsableTick(tickSpacing));
-        int24 numRoundedTicksCarpeted = (maxUsableTick - minUsableTick) / tickSpacing - length;
-        if (numRoundedTicksCarpeted <= 0) {
-            return (0, totalLiquidity, 0, minUsableTick, maxUsableTick);
-        }
-        mainLiquidity = totalLiquidity.mulWad(WAD - weightCarpet);
-        uint256 carpetLiquidity = totalLiquidity - mainLiquidity;
-        uint24 rightCarpetNumRoundedTicks = uint24((maxUsableTick - minTick) / tickSpacing - length);
-        rightCarpetLiquidity = carpetLiquidity.mulDiv(rightCarpetNumRoundedTicks, uint24(numRoundedTicksCarpeted));
-        leftCarpetLiquidity = carpetLiquidity - rightCarpetLiquidity;
-    }
-
     /// @return minTick The minimum rounded tick of the distribution
     /// @return length The length of the geometric distribution in number of rounded ticks
     /// @return alphaX96 The alpha of the geometric distribution

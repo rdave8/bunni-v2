@@ -872,7 +872,7 @@ contract CuratedDistributionTest is BaseTest {
         bytes28 newBaseParams = bytes28(abi.encodePacked(ShiftMode.RIGHT, int24(-20), int24(1)));
 
         // set new params should revert since the spot price (0) is no longer in range
-        vm.expectRevert("LiquidityDensityAtSpotPriceTooLow(0)");
+        vm.expectRevert("LiquidityDensityAtSpotPriceTooLow()");
         curatedLdf.setLdfParams(key, DistributionType.UNIFORM, newBaseParams, 15 minutes);
     }
 

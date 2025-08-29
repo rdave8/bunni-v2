@@ -34,7 +34,7 @@ optimizer_runs = 2000 # optimal
 optimizer_runs = 10_000
 
 [profile.curated_ldf]
-optimizer_runs = 12_500
+optimizer_runs = 700 # optimal
 
 [rpc_endpoints]
 arbitrum = "${RPC_URL_ARBITRUM}"

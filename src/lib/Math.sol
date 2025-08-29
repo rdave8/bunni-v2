@@ -93,3 +93,32 @@ function roundUpFullMulDivResult(uint256 x, uint256 y, uint256 d, uint256 result
         }
     }
 }
+
+function getCarpetedLiquidity(
+    uint256 totalLiquidity,
+    int24 tickSpacing,
+    int24 minTick,
+    int24 length,
+    uint256 weightCarpet
+)
+    pure
+    returns (
+        uint256 leftCarpetLiquidity,
+        uint256 mainLiquidity,
+        uint256 rightCarpetLiquidity,
+        int24 minUsableTick,
+        int24 maxUsableTick
+    )
+{
+    (minUsableTick, maxUsableTick) = (TickMath.minUsableTick(tickSpacing), TickMath.maxUsableTick(tickSpacing));
+    int24 numRoundedTicksCarpeted = (maxUsableTick - minUsableTick) / tickSpacing - length;
+    if (numRoundedTicksCarpeted <= 0) {
+        return (0, totalLiquidity, 0, minUsableTick, maxUsableTick);
+    }
+    mainLiquidity = totalLiquidity.mulWad(WAD - weightCarpet);
+    uint256 carpetLiquidity = totalLiquidity - mainLiquidity;
+    rightCarpetLiquidity = carpetLiquidity.mulDiv(
+        uint24((maxUsableTick - minTick) / tickSpacing - length), uint24(numRoundedTicksCarpeted)
+    );
+    leftCarpetLiquidity = carpetLiquidity - rightCarpetLiquidity;
+}
