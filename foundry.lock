@@ -1,0 +1,32 @@
+{
+  "lib/create3-factory": {
+    "rev": "567d6ec78cd0545f2fb18135dcb68298a5a1ef09"
+  },
+  "lib/flood-contracts": {
+    "rev": "41645078380fb7c527541d060920af78cb2a4424"
+  },
+  "lib/clones-with-immutable-args": {
+    "rev": "196f1ecc6485c1bf2d41677fa01d3df4927ff9ce"
+  },
+  "lib/forge-std": {
+    "rev": "f46d8301cf732f4f83846565aa475628265e51e0"
+  },
+  "lib/multicaller": {
+    "rev": "cf462935512939597d1c914aded4677df0b19538"
+  },
+  "lib/solmate": {
+    "rev": "c93f7716c9909175d45f6ef80a34a650e2d24e56"
+  },
+  "lib/v4-core": {
+    "rev": "e50237c43811bd9b526eff40f26772152a42daba"
+  },
+  "lib/solady": {
+    "rev": "b609a9c79ce541c2beca7a7d247665e7c93942a3"
+  },
+  "lib/biddog": {
+    "rev": "718dcf5e0608067af1217780f73c5a97d7d4e5f1"
+  },
+  "lib/permit2": {
+    "rev": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219"
+  }
+}
